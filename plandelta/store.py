@@ -19,12 +19,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Sequence
 
+from . import dbfile
 from .judge import ExtraFinding, Verdict
 from .matcher import Evidence
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DB_NAME = "snapshots.db"
-BACKUP_KEEP = 3
+BACKUP_KEEP = dbfile.BACKUP_KEEP
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
@@ -36,7 +37,8 @@ CREATE TABLE IF NOT EXISTS snapshots (
     created_at TEXT NOT NULL,
     engine TEXT NOT NULL,
     model TEXT NOT NULL,
-    totals TEXT NOT NULL
+    totals TEXT NOT NULL,
+    toolchain TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS items (
     snapshot_id INTEGER NOT NULL REFERENCES snapshots(id) ON DELETE CASCADE,
@@ -95,10 +97,24 @@ class Store:
             self.conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
             self.conn.commit()
             return
+        if row["version"] < SCHEMA_VERSION:
+            self._upgrade(int(row["version"]))
+            return
         if row["version"] > SCHEMA_VERSION:
             raise RuntimeError(
                 f"database schema v{row['version']} is newer than this build (v{SCHEMA_VERSION})"
             )
+
+    def _upgrade(self, from_version: int) -> None:
+        """Sequential migrations. Never destructive."""
+        if from_version < 2:
+            columns = {r["name"] for r in self.conn.execute("PRAGMA table_info(snapshots)")}
+            if "toolchain" not in columns:
+                self.conn.execute(
+                    "ALTER TABLE snapshots ADD COLUMN toolchain TEXT NOT NULL DEFAULT ''"
+                )
+        self.conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
+        self.conn.commit()
 
     def _restrict_permissions(self) -> None:
         for suffix in ("", "-wal", "-shm"):
@@ -153,6 +169,32 @@ class Store:
             self.conn.execute("SELECT * FROM snapshots WHERE pair_id = ? ORDER BY id", (pair_id,))
         )
 
+    def snapshot_detail(self, snapshot_id: int) -> dict:
+        """Items and extras of one snapshot, shaped like a fresh comparison.
+
+        An unchanged pair must still answer "what were the verdicts?" — the
+        caller should never have to re-run the model to see them.
+        """
+        items = [
+            {
+                "item_key": row["item_key"], "title": row["title"], "section": row["section"],
+                "line_start": row["line_start"], "line_end": row["line_end"],
+                "status": row["status"], "points": row["points"], "reason": row["reason"],
+                "evidence": json.loads(row["evidence"]), "cached": True, "lineage": row["lineage"],
+            }
+            for row in self.conn.execute(
+                "SELECT * FROM items WHERE snapshot_id = ? ORDER BY rowid", (snapshot_id,)
+            )
+        ]
+        extras = [
+            {"status": "extra", "points": 0, "reason": row["reason"], "file": row["file"],
+             "line_start": row["line_start"], "line_end": row["line_end"], "quote": row["quote"]}
+            for row in self.conn.execute(
+                "SELECT * FROM extras WHERE snapshot_id = ? ORDER BY rowid", (snapshot_id,)
+            )
+        ]
+        return {"items": items, "extras": extras}
+
     def previous_items(self, pair_id: str) -> dict[str, str]:
         """``item_key`` → title from the newest snapshot, for lineage matching."""
         snapshot = self.latest_snapshot(pair_id)
@@ -171,6 +213,7 @@ class Store:
         bundle_hash: str,
         engine: str,
         model: str,
+        toolchain: str,
         totals: dict,
         verdicts: Sequence[Verdict],
         extras: Sequence[ExtraFinding],
@@ -180,8 +223,9 @@ class Store:
         with self.transaction() as conn:
             cursor = conn.execute(
                 "INSERT INTO snapshots (pair_id, plan_hash, bundle_hash, created_at, engine, model,"
-                " totals) VALUES (?, ?, ?, datetime('now'), ?, ?, ?)",
-                (pair_id, plan_hash, bundle_hash, engine, model, json.dumps(totals, ensure_ascii=False)),
+                " totals, toolchain) VALUES (?, ?, ?, datetime('now'), ?, ?, ?, ?)",
+                (pair_id, plan_hash, bundle_hash, engine, model,
+                 json.dumps(totals, ensure_ascii=False), toolchain),
             )
             snapshot_id = int(cursor.lastrowid)
             conn.executemany(
@@ -221,40 +265,11 @@ class Store:
     # -- backup / restore --------------------------------------------------
 
     def backup(self) -> Path:
-        """Consistent backup via SQLite's backup API, then integrity-checked."""
-        self._rotate_backups()
-        target = Path(f"{self.path}.bak1")
-        with sqlite3.connect(target) as dest:
-            self.conn.backup(dest)
-            status = dest.execute("PRAGMA integrity_check").fetchone()[0]
-        if status != "ok":
-            target.unlink(missing_ok=True)
-            raise RuntimeError(f"backup failed integrity_check: {status}")
-        target.chmod(0o600)
-        return target
+        return dbfile.backup(self.conn, self.path, BACKUP_KEEP)
 
-    def _rotate_backups(self) -> None:
-        for index in range(BACKUP_KEEP, 0, -1):
-            source = Path(f"{self.path}.bak{index}")
-            if not source.exists():
-                continue
-            if index == BACKUP_KEEP:
-                source.unlink()
-            else:
-                source.rename(Path(f"{self.path}.bak{index + 1}"))
-
-    def restore(self, backup: Path) -> None:
-        """Restore atomically: verify a temp copy first, keep the old file."""
-        temp = Path(f"{self.path}.restoring")
-        with sqlite3.connect(backup) as source, sqlite3.connect(temp) as dest:
-            source.backup(dest)
-            status = dest.execute("PRAGMA integrity_check").fetchone()[0]
-        if status != "ok":
-            temp.unlink(missing_ok=True)
-            raise RuntimeError(f"restore source failed integrity_check: {status}")
+    def restore(self, backup_path: Path) -> None:
         self.conn.close()
-        Path(self.path).replace(Path(f"{self.path}.pre-restore"))
-        temp.replace(self.path)
+        dbfile.restore(self.path, backup_path)
         self.conn = sqlite3.connect(self.path)
         self.conn.row_factory = sqlite3.Row
         self._restrict_permissions()

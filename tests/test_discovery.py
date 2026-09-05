@@ -19,12 +19,20 @@ class DiscoveryTest(unittest.TestCase):
         skipped = {entry["id"]: entry["reason"] for entry in result.skipped}
         self.assertEqual(skipped, {"orphan-plan": "no primary completion document"})
 
-    def test_supplementary_files_join_the_bundle(self) -> None:
+    def test_only_delivery_documents_join_the_bundle(self) -> None:
+        """Review notes and approval metadata are not delivery evidence."""
         pair = next(p for p in discover(ROOT).pairs if p.id == "bundle-multi")
-        names = [p.name for p in pair.done]
+        self.assertEqual([p.name for p in pair.done], ["bundle-multi_completion.md"])
+
+    def test_extra_documents_can_be_opted_in(self) -> None:
+        pair = next(
+            p
+            for p in discover(ROOT, supplementary_suffixes=("_verify.md",)).pairs
+            if p.id == "bundle-multi"
+        )
         self.assertEqual(
-            names,
-            ["bundle-multi_completion.md", "bundle-multi_verify.md", "bundle-multi_status.json"],
+            [p.name for p in pair.done],
+            ["bundle-multi_completion.md", "bundle-multi_verify.md"],
         )
 
     def test_manifest_takes_priority(self) -> None:

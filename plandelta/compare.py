@@ -221,7 +221,17 @@ def compare_pair(
     )
 
 
-def is_unchanged(store, pair: Pair, p_hash: str, b_hash: str) -> bool:
-    """True when the newest snapshot already describes these exact documents."""
+def is_unchanged(store, pair: Pair, p_hash: str, b_hash: str, toolchain: str) -> bool:
+    """True when the newest snapshot describes these documents *and* this toolchain.
+
+    The toolchain check is what makes the shortcut safe: same documents judged by
+    a different prompt, extractor or model is not the same answer.
+    """
     latest = store.latest_snapshot(pair.id) if store else None
-    return bool(latest and latest["plan_hash"] == p_hash and latest["bundle_hash"] == b_hash)
+    if not latest:
+        return False
+    return (
+        latest["plan_hash"] == p_hash
+        and latest["bundle_hash"] == b_hash
+        and (latest["toolchain"] or "") == toolchain
+    )

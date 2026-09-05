@@ -7,11 +7,11 @@ import json
 import sys
 from pathlib import Path
 
-from .compare import compare_pair, is_unchanged, load_documents
+from .compare import SCHEMA, compare_pair, is_unchanged, load_documents
 from .discovery import Pair, discover
 from .engines import DEFAULT_ENGINE, ENGINE_IDS, build_engine, require_consent
 from .errors import PlandeltaError
-from .hashing import bundle_hash, plan_hash
+from .hashing import bundle_hash, plan_hash, toolchain_id
 from .report import render_report
 from .store import Store
 
@@ -77,17 +77,22 @@ def _compare_one(pair: Pair, engine, store: Store, args: argparse.Namespace) -> 
     plan_text, documents = load_documents(pair)
     p_hash = plan_hash(plan_text)
     b_hash = bundle_hash(list(documents.items()))
-    if not args.force and is_unchanged(store, pair, p_hash, b_hash):
+    chain = toolchain_id(engine.info.id, engine.info.model_id)
+    if not args.force and is_unchanged(store, pair, p_hash, b_hash, chain):
         latest = store.latest_snapshot(pair.id)
         return {
-            "pair": pair.as_dict(args.root), "unchanged": True,
-            "snapshot_id": latest["id"], "totals": json.loads(latest["totals"]), "llm_calls": 0,
+            "schema": SCHEMA, "pair": pair.as_dict(args.root), "unchanged": True,
+            "plan_hash": p_hash, "bundle_hash": b_hash,
+            "generated_by": {"engine": latest["engine"], "model": latest["model"], "llm_calls": 0},
+            "snapshot_id": latest["id"], "totals": json.loads(latest["totals"]),
+            **store.snapshot_detail(latest["id"]),
         }
 
     result = compare_pair(pair, engine, store, force=args.force, find_extras=not args.no_extras)
     result.snapshot_id = store.write_snapshot(
         pair_id=pair.id, plan_hash=result.plan_hash, bundle_hash=result.bundle_hash,
-        engine=engine.info.id, model=engine.resolved_model(), totals=result.totals.as_dict(),
+        engine=engine.info.id, model=engine.resolved_model(), toolchain=chain,
+        totals=result.totals.as_dict(),
         verdicts=result.verdicts, extras=result.extras, lineage=result.lineage,
     )
     if args.report:

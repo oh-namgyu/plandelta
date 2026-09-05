@@ -20,9 +20,9 @@ from typing import Iterable, Sequence
 
 # Algorithm versions. Bump when behaviour changes in a way that invalidates
 # previously cached verdicts.
-EXTRACTOR_VERSION = "1"
+EXTRACTOR_VERSION = "2"  # v2: leaf headings only in the prose fallback
 MATCHER_VERSION = "1"
-PROMPT_VERSION = "1"
+PROMPT_VERSION = "2"  # v2: explicit done/partial boundary + conflict-resolution rule
 OUTPUT_SCHEMA = "1"
 
 _EMPHASIS_RE = re.compile(r"[*_`~]+")
@@ -99,6 +99,19 @@ def item_fingerprint(
         ]
     )
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+def toolchain_id(engine_id: str, model_id: str) -> str:
+    """Identity of everything except the documents.
+
+    Stored with each snapshot so that upgrading plandelta, changing the prompt or
+    switching model invalidates "these documents are unchanged, reuse the last
+    answer" — otherwise a tool upgrade silently serves stale verdicts.
+    """
+    return (
+        f"{EXTRACTOR_VERSION}.{MATCHER_VERSION}.{PROMPT_VERSION}.{OUTPUT_SCHEMA}"
+        f":{engine_id}:{model_id}"
+    )
 
 
 def read_text(path: Path) -> str:

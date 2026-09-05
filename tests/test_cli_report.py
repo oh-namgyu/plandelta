@@ -52,7 +52,7 @@ class CliTest(unittest.TestCase):
         )
         store.write_snapshot(
             pair_id=pair.id, plan_hash=result.plan_hash, bundle_hash=result.bundle_hash,
-            engine="scripted", model="test-model", totals=result.totals.as_dict(),
+            engine="scripted", model="test-model", toolchain="t1", totals=result.totals.as_dict(),
             verdicts=result.verdicts, extras=result.extras, lineage=result.lineage,
         )
         store.close()

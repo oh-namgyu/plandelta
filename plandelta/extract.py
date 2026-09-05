@@ -128,11 +128,18 @@ def _structured_items(lines: Sequence[_Line]) -> list[PlanItem]:
 
 
 def _heading_items(lines: Sequence[_Line]) -> list[PlanItem]:
-    """Fallback for prose plans: every leaf heading of depth >= 2 is an item."""
+    """Fallback for prose plans: only *leaf* headings of depth >= 2 are items.
+
+    A heading with sub-headings is scaffolding — "2. Problem list" promises
+    nothing, its children do. Measured: keeping parents made 4 of 5 non-promise
+    headings in a prose plan look like requirements.
+    """
     items: list[PlanItem] = []
     for idx, line in enumerate(lines):
         heading = HEADING_RE.match(line.text)
         if not heading or len(heading.group(1)) < 2:
+            continue
+        if _has_child_heading(lines, idx, len(heading.group(1))):
             continue
         body_end = _heading_block_end(lines, idx)
         body = "\n".join(l.text for l in lines[idx : body_end + 1]).strip()
@@ -151,6 +158,16 @@ def _heading_items(lines: Sequence[_Line]) -> list[PlanItem]:
             )
         )
     return items
+
+
+def _has_child_heading(lines: Sequence[_Line], start_idx: int, depth: int) -> bool:
+    """True when a deeper heading follows before the next sibling or uncle."""
+    for idx in range(start_idx + 1, len(lines)):
+        heading = HEADING_RE.match(lines[idx].text)
+        if not heading:
+            continue
+        return len(heading.group(1)) > depth
+    return False
 
 
 def _heading_block_end(lines: Sequence[_Line], start_idx: int) -> int:

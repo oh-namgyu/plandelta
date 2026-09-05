@@ -52,7 +52,7 @@ class StoreTest(unittest.TestCase):
         result = compare_pair(self.pair, engine, self.store, find_extras=False)
         result.snapshot_id = self.store.write_snapshot(
             pair_id=self.pair.id, plan_hash=result.plan_hash, bundle_hash=result.bundle_hash,
-            engine=engine.info.id, model=engine.info.model_id, totals=result.totals.as_dict(),
+            engine=engine.info.id, model=engine.info.model_id, toolchain="t1", totals=result.totals.as_dict(),
             verdicts=result.verdicts, extras=result.extras, lineage=result.lineage,
         )
         return result
@@ -71,7 +71,32 @@ class StoreTest(unittest.TestCase):
 
     def test_unchanged_documents_are_detected(self) -> None:
         result = self._run(ScriptedEngine([all_done_reply(3, "The ingest service reads CSV files")]))
-        self.assertTrue(is_unchanged(self.store, self.pair, result.plan_hash, result.bundle_hash))
+        self.assertTrue(
+            is_unchanged(self.store, self.pair, result.plan_hash, result.bundle_hash, "t1")
+        )
+
+    def test_new_toolchain_invalidates_the_unchanged_shortcut(self) -> None:
+        """Upgrading the prompt, extractor or model must not serve a stale verdict."""
+        result = self._run(ScriptedEngine([all_done_reply(3, "The ingest service reads CSV files")]))
+        self.assertFalse(
+            is_unchanged(self.store, self.pair, result.plan_hash, result.bundle_hash, "t2")
+        )
+
+    def test_v1_database_upgrades_in_place(self) -> None:
+        self._run(ScriptedEngine([all_done_reply(3, "The ingest service reads CSV files")]))
+        self.store.close()
+        conn = sqlite3.connect(self.root / ".plandelta" / "snapshots.db")
+        conn.execute("UPDATE schema_version SET version = 1")
+        conn.commit()
+        conn.close()
+        store = Store(self.root)
+        try:
+            self.assertEqual(len(store.snapshots(self.pair.id)), 1)
+            version = store.conn.execute("SELECT version FROM schema_version").fetchone()[0]
+            self.assertEqual(version, 2)
+        finally:
+            store.close()
+        self.store = Store(self.root)
 
     def test_editing_the_bundle_only_reruns_affected_items(self) -> None:
         quote = "The ingest service reads CSV files"
@@ -102,7 +127,7 @@ class StoreTest(unittest.TestCase):
         with self.assertRaises(Exception):
             self.store.write_snapshot(
                 pair_id=self.pair.id, plan_hash=result.plan_hash, bundle_hash=result.bundle_hash,
-                engine="scripted", model="test-model", totals=result.totals.as_dict(),
+                engine="scripted", model="test-model", toolchain="t1", totals=result.totals.as_dict(),
                 verdicts=broken, extras=[], lineage={},
             )
         self.assertEqual(self.store.snapshots(self.pair.id), [])

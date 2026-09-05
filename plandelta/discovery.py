@@ -22,11 +22,16 @@ from .errors import PairAmbiguous, PathDenied
 
 MANIFEST_NAME = "plandelta.pairs.json"
 DEFAULT_PLAN_GLOBS = ("*_final.md", "*_draft.md")
-# A pair needs at least one *primary* document — something that reports what was
-# delivered. Supplementary files only join a bundle that already has a primary,
-# so plan-side metadata never masquerades as completion evidence.
+# A bundle may only contain documents that *report what was delivered*.
+#
+# Measured the hard way: an earlier default pulled in `_verify.md`, which in the
+# author's corpus is a pre-implementation critique of the plan. The judge then
+# read "the rollback procedure is undefined" — a complaint about the plan — as
+# proof that rollback did not ship, and produced false `missed` verdicts. Review
+# notes, approval metadata and plan critiques are not delivery evidence; add
+# them explicitly through a manifest if your corpus uses them differently.
 DEFAULT_PRIMARY_SUFFIXES = ("_completion.md",)
-DEFAULT_SUPPLEMENTARY_SUFFIXES = ("_verify.md", "_status.json")
+DEFAULT_SUPPLEMENTARY_SUFFIXES: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
