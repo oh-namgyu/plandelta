@@ -127,5 +127,51 @@ class ScoringTest(unittest.TestCase):
         self.assertEqual(totals.points, 3)
 
 
+
+
+class ExtraCandidateTest(unittest.TestCase):
+    def _para(self, text: str):
+        from plandelta.matcher import Evidence
+
+        return Evidence("done.md", 1, 3, text, 0.0)
+
+    def test_prose_about_delivered_work_is_a_candidate(self) -> None:
+        from plandelta.matcher import is_prose
+
+        self.assertTrue(
+            is_prose(self._para("We also added a --watch mode that nobody asked for, with tests."))
+        )
+
+    def test_headings_and_tables_are_not_candidates(self) -> None:
+        from plandelta.matcher import is_prose
+
+        for noise in ("# Completion report for the ingest service work", "| a | b | c | d | e | f |"):
+            self.assertFalse(is_prose(self._para(noise)), noise)
+
+    def test_front_matter_and_next_steps_are_not_candidates(self) -> None:
+        from plandelta.matcher import is_prose
+
+        for noise in (
+            "작성: 2026-09-06 · 코드 커밋: abc1234 · 검증: pytest 210 green 전체 통과함",
+            "다음 작업자 첫 액션: 골드셋을 만들고 품질 지표를 숫자로 산출할 것",
+        ):
+            self.assertFalse(is_prose(self._para(noise)), noise)
+
+    def test_very_short_paragraphs_are_not_candidates(self) -> None:
+        from plandelta.matcher import is_prose
+
+        self.assertFalse(is_prose(self._para("Shipped the CLI.")))
+
+    def test_candidates_exclude_filtered_paragraphs(self) -> None:
+        from plandelta.matcher import extra_candidates
+
+        paragraphs = [
+            self._para("# Some heading that matches nothing at all in this plan"),
+            self._para("We also shipped an unplanned export button with its own tests."),
+        ]
+        found = extra_candidates(ITEMS, paragraphs)
+        self.assertEqual([e.quote[:16] for e in found], ["We also shipped "])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -19,11 +19,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Sequence
 
-from . import dbfile
+from . import dbfile, overrides
 from .judge import ExtraFinding, Verdict
 from .matcher import Evidence
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 DB_NAME = "snapshots.db"
 BACKUP_KEEP = dbfile.BACKUP_KEEP
 
@@ -59,6 +59,17 @@ CREATE TABLE IF NOT EXISTS extras (
     file TEXT NOT NULL, line_start INTEGER NOT NULL, line_end INTEGER NOT NULL,
     quote TEXT NOT NULL, reason TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS overrides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pair_id TEXT NOT NULL,
+    item_key TEXT NOT NULL,
+    status TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    author TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_overrides_pair ON overrides(pair_id, item_key, id);
 CREATE TABLE IF NOT EXISTS verdict_cache (
     fingerprint TEXT PRIMARY KEY,
     status TEXT NOT NULL, reason TEXT NOT NULL, evidence TEXT NOT NULL, created_at TEXT NOT NULL
@@ -113,6 +124,7 @@ class Store:
                 self.conn.execute(
                     "ALTER TABLE snapshots ADD COLUMN toolchain TEXT NOT NULL DEFAULT ''"
                 )
+        # v3 adds the overrides table, which executescript already created.
         self.conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         self.conn.commit()
 
@@ -169,38 +181,30 @@ class Store:
             self.conn.execute("SELECT * FROM snapshots WHERE pair_id = ? ORDER BY id", (pair_id,))
         )
 
-    def snapshot_detail(self, snapshot_id: int) -> dict:
-        """Items and extras of one snapshot, shaped like a fresh comparison.
-
-        An unchanged pair must still answer "what were the verdicts?" — the
-        caller should never have to re-run the model to see them.
-        """
-        items = [
-            {
-                "item_key": row["item_key"], "title": row["title"], "section": row["section"],
-                "line_start": row["line_start"], "line_end": row["line_end"],
-                "status": row["status"], "points": row["points"], "reason": row["reason"],
-                "evidence": json.loads(row["evidence"]), "cached": True, "lineage": row["lineage"],
-            }
-            for row in self.conn.execute(
-                "SELECT * FROM items WHERE snapshot_id = ? ORDER BY rowid", (snapshot_id,)
-            )
-        ]
-        extras = [
-            {"status": "extra", "points": 0, "reason": row["reason"], "file": row["file"],
-             "line_start": row["line_start"], "line_end": row["line_end"], "quote": row["quote"]}
-            for row in self.conn.execute(
-                "SELECT * FROM extras WHERE snapshot_id = ? ORDER BY rowid", (snapshot_id,)
-            )
-        ]
-        return {"items": items, "extras": extras}
-
     def snapshot_has_errors(self, snapshot_id: int) -> bool:
         """Did this round leave any item unjudged because the engine failed?"""
         row = self.conn.execute(
             "SELECT 1 FROM items WHERE snapshot_id = ? AND status = 'error' LIMIT 1", (snapshot_id,)
         ).fetchone()
         return row is not None
+
+    # -- human overrides (see overrides.py) --------------------------------
+
+    def set_override(
+        self, pair_id: str, item_key: str, status: str, reason: str, author: str = "human"
+    ) -> int:
+        with self.transaction() as conn:
+            return overrides.set_override(conn, pair_id, item_key, status, reason, author)
+
+    def revoke_override(self, pair_id: str, item_key: str) -> bool:
+        with self.transaction() as conn:
+            return overrides.revoke(conn, pair_id, item_key)
+
+    def overrides(self, pair_id: str) -> dict[str, dict]:
+        return overrides.active(self.conn, pair_id)
+
+    def override_history(self, pair_id: str) -> list[dict]:
+        return overrides.history(self.conn, pair_id)
 
     def previous_items(self, pair_id: str) -> dict[str, str]:
         """``item_key`` → title from the newest snapshot, for lineage matching."""

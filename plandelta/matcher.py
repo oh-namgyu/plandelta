@@ -26,6 +26,15 @@ STOPWORDS = {
 TOP_K = 5
 EXTRA_THRESHOLD = 0.15
 MIN_PARAGRAPH_WORDS = 4
+# Scope-creep candidates come from prose about work, not from the scaffolding
+# around it. Headings, front matter and link lines matched no plan item simply
+# because they say nothing, and feeding them to the model made the answer noisy.
+NOISE_PREFIXES = ("#", ">", "|", "```", "---", "===")
+META_MARKERS = (
+    "작성:", "작성일", "계획:", "코드 커밋", "검증:", "commit:", "author:", "date:",
+    "다음 작업자", "첫 액션", "잔여", "후속", "todo", "next:",
+)
+MIN_EXTRA_WORDS = 8
 
 
 @dataclass(frozen=True)
@@ -107,15 +116,29 @@ def rank_evidence(item: PlanItem, paragraphs: Sequence[Evidence], top_k: int = T
     return [e for e in scored[:top_k] if e.score > 0.0]
 
 
+def is_prose(paragraph: Evidence) -> bool:
+    """Does this paragraph make a statement, rather than structure a document?"""
+    text = paragraph.quote.strip()
+    if len(text.split()) < MIN_EXTRA_WORDS:
+        return False
+    first = text.splitlines()[0].strip()
+    if first.startswith(NOISE_PREFIXES):
+        return False
+    lowered = text.lower()
+    return not any(marker in lowered for marker in META_MARKERS)
+
+
 def extra_candidates(
     items: Sequence[PlanItem],
     paragraphs: Sequence[Evidence],
     threshold: float = EXTRA_THRESHOLD,
 ) -> list[Evidence]:
-    """Completion paragraphs that match no plan item — scope creep candidates."""
+    """Completion prose that matches no plan item — scope creep candidates."""
     item_tokens = [set(tokenize(f"{i.title} {i.body}")) for i in items]
     out: list[Evidence] = []
     for para in paragraphs:
+        if not is_prose(para):
+            continue
         tokens = tokenize(para.quote)
         best = max((_overlap(t, tokens) for t in item_tokens), default=0.0)
         if best < threshold:

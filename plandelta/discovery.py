@@ -36,12 +36,19 @@ DEFAULT_SUPPLEMENTARY_SUFFIXES: tuple[str, ...] = ()
 
 @dataclass(frozen=True)
 class Pair:
-    """One plan document plus the completion documents that answer it."""
+    """One plan document plus the completion documents that answer it.
+
+    ``scope`` narrows which promises this round is answerable for. A completion
+    report that covers phase one should not make phase two look abandoned, so
+    plan items outside the declared scope are set aside rather than scored.
+    An empty scope means the whole plan.
+    """
 
     id: str
     plan: Path
     done: tuple[Path, ...]
     title: str = ""
+    scope: tuple[str, ...] = ()
 
     def as_dict(self, root: Path) -> dict:
         return {
@@ -49,7 +56,15 @@ class Pair:
             "title": self.title or self.id,
             "plan": _relative(self.plan, root),
             "done": [_relative(p, root) for p in self.done],
+            "scope": list(self.scope),
         }
+
+    def in_scope(self, section: str, title: str) -> bool:
+        """True when no scope is declared, or the item sits inside one."""
+        if not self.scope:
+            return True
+        haystack = f"{section} {title}".lower()
+        return any(needle.lower() in haystack for needle in self.scope)
 
 
 def _relative(path: Path, root: Path) -> str:
@@ -116,7 +131,10 @@ def _from_manifest(root: Path, manifest: Path) -> Discovery:
             result.skipped.append({"id": entry.get("id", plan.name), "reason": "empty bundle"})
             continue
         result.pairs.append(
-            Pair(id=entry.get("id", plan.stem), plan=plan, done=done, title=entry.get("title", ""))
+            Pair(
+                id=entry.get("id", plan.stem), plan=plan, done=done,
+                title=entry.get("title", ""), scope=tuple(entry.get("scope", []) or []),
+            )
         )
     return result
 

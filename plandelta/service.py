@@ -11,10 +11,12 @@ import json
 from pathlib import Path
 from typing import Sequence
 
+from . import overrides
 from .compare import is_unchanged, load_documents
 from .discovery import Pair, discover
 from .errors import PlandeltaError
 from .hashing import bundle_hash, plan_hash
+from .scoring import summarize_rows
 
 
 def scan(root: Path, store, toolchain: str) -> list[dict]:
@@ -48,6 +50,41 @@ def _pair_row(pair: Pair, root: Path, store, toolchain: str) -> dict:
         row["dirty"] = False
         row["error"] = exc.as_dict()["error"]
     return row
+
+
+def snapshot_detail(store, snapshot_id: int, pair_id: str = "") -> dict:
+    """Items and extras of one snapshot, with any human overrides applied.
+
+    An unchanged pair must still answer "what were the verdicts?" without
+    re-running the model, and a person's later correction has to travel with the
+    answer — otherwise the review queue would be advice nobody acted on.
+    """
+    items = [
+        {
+            "item_key": row["item_key"], "title": row["title"], "section": row["section"],
+            "line_start": row["line_start"], "line_end": row["line_end"],
+            "status": row["status"], "points": row["points"], "reason": row["reason"],
+            "evidence": json.loads(row["evidence"]), "cached": True, "lineage": row["lineage"],
+        }
+        for row in store.conn.execute(
+            "SELECT * FROM items WHERE snapshot_id = ? ORDER BY rowid", (snapshot_id,)
+        )
+    ]
+    extras = [
+        {"status": "extra", "points": 0, "reason": row["reason"], "file": row["file"],
+         "line_start": row["line_start"], "line_end": row["line_end"], "quote": row["quote"]}
+        for row in store.conn.execute(
+            "SELECT * FROM extras WHERE snapshot_id = ? ORDER BY rowid", (snapshot_id,)
+        )
+    ]
+    if pair_id:
+        items = overrides.apply(items, store.overrides(pair_id))
+    return {
+        "items": items,
+        "extras": extras,
+        "totals": summarize_rows(items, len(extras)).as_dict(),
+        "overridden": overrides.count(items),
+    }
 
 
 def trend(store, pair_id: str) -> list[dict]:

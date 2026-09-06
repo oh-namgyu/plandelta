@@ -229,20 +229,30 @@ def compare_pair(
     b_hash = bundle_hash([(name, text) for name, text in documents.items()])
 
     items = extract_items(plan_text)
+    in_scope = [i for i in items if pair.in_scope(i.section, i.title)]
     paragraphs = _paragraphs(documents)
-    evidence = {item.key: rank_evidence(item, paragraphs) for item in items}
-    fingerprints = _fingerprints(items, evidence, engine)
-    verdicts, pending = _load_cached(items, fingerprints, store, force)
+    evidence = {item.key: rank_evidence(item, paragraphs) for item in in_scope}
+    fingerprints = _fingerprints(in_scope, evidence, engine)
+    verdicts, pending = _load_cached(in_scope, fingerprints, store, force)
+    # Items the round was never meant to answer for cost nothing and accuse
+    # nobody: no model call, no score, counted on their own.
+    for item in items:
+        if item.key not in {i.key for i in in_scope}:
+            verdicts[item.key] = judge.Verdict(
+                item=item, status="out_of_scope", reason="outside the declared scope of this round"
+            )
 
     judged, calls = _judge_items(engine, pending, evidence, documents) if pending else ({}, 0)
     verdicts.update(judged)
     extras, extra_calls = ([], 0)
     if find_extras and pending:
-        extras, extra_calls = _find_extras(engine, items, paragraphs, documents)
+        extras, extra_calls = _find_extras(engine, in_scope or items, paragraphs, documents)
 
     ordered = [verdicts[item.key] for item in items if item.key in verdicts]
     for verdict in ordered:
-        verdict.fingerprint = fingerprints[verdict.item.key]
+        # Out-of-scope items were never fingerprinted; leaving it blank also
+        # keeps them out of the verdict cache, which is what we want.
+        verdict.fingerprint = fingerprints.get(verdict.item.key, "")
 
     lineage = _lineage(items, store.previous_items(pair.id) if store else {})
     return ComparisonResult(

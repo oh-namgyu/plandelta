@@ -143,6 +143,8 @@ function selectItem(index) {
   }
   item.evidence.forEach((evidence) => pane.append(quoteBlock(evidence)));
 
+  pane.append(overrideControl(item));
+
   const extras = state.snapshot?.extras || [];
   if (index === 0 && extras.length) {
     pane.append(node("h2", "section-title", `Unplanned work (${extras.length})`));
@@ -169,6 +171,60 @@ function setChart(target, markup) {
   });
   target.textContent = "";
   target.append(...parsed.body.childNodes);
+}
+
+// The review queue: what the tool abstained on, a person settles here. The
+// machine verdict is kept and shown alongside, never overwritten.
+const OVERRIDE_CHOICES = ["exceeded", "done", "partial", "missed", "unknown", "out_of_scope"];
+
+function overrideControl(item) {
+  const box = node("div", "override");
+  if (item.override) {
+    const was = item.machine_status ? ` (model said ${STATUS_LABEL[item.machine_status] || item.machine_status})` : "";
+    box.append(node("p", "reason", `Overridden by ${item.override.author}${was}: ${item.override.reason || "no reason given"}`));
+  }
+  const select = node("select", "override-status");
+  OVERRIDE_CHOICES.forEach((status) => {
+    const option = node("option", null, STATUS_LABEL[status] || status);
+    option.value = status;
+    if (status === item.status) option.selected = true;
+    select.append(option);
+  });
+  const reason = document.createElement("input");
+  reason.className = "override-reason";
+  reason.type = "text";
+  reason.placeholder = "why (recorded with the override)";
+  reason.value = item.override?.reason || "";
+
+  const save = node("button", "btn-primary", "Set verdict");
+  save.type = "button";
+  save.addEventListener("click", () => sendOverride({
+    item_key: item.item_key, status: select.value, reason: reason.value,
+  }));
+  const drop = node("button", "btn-quiet", "Revoke");
+  drop.type = "button";
+  drop.addEventListener("click", () => sendOverride({ item_key: item.item_key, revoke: true }));
+
+  const row = node("div", "override-row");
+  row.append(select, reason, save);
+  if (item.override) row.append(drop);
+  box.append(row);
+  return box;
+}
+
+async function sendOverride(payload) {
+  const index = state.selected;
+  setStatus("saving verdict…");
+  try {
+    await api(`/api/pairs/${encodeURIComponent(state.current)}/override`, {
+      method: "POST", body: JSON.stringify(payload),
+    });
+    await selectPair(state.current);
+    if (index != null) selectItem(index);
+    setStatus("verdict saved");
+  } catch (error) {
+    setStatus(`failed: ${error.message}`);
+  }
 }
 
 function renderCharts(charts) {

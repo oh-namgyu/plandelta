@@ -5,13 +5,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from .compare import SCHEMA, compare_pair, is_unchanged, load_documents
 from .discovery import Pair, discover
+from .overrides import OVERRIDABLE
 from .engines import DEFAULT_ENGINE, ENGINE_IDS, build_engine, require_consent
 from .errors import PlandeltaError
 from .hashing import bundle_hash, plan_hash, toolchain_id
+from . import service
 from .report import render_report
 from .server import DEFAULT_PORT, serve
 from .store import Store
@@ -38,6 +41,10 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--timeout", type=int, default=120, help="per-call timeout in seconds")
     compare.add_argument("--force", action="store_true", help="ignore cached verdicts")
     compare.add_argument("--no-extras", action="store_true", help="skip unplanned-work detection")
+    compare.add_argument(
+        "--scope", action="append", default=[], metavar="TEXT",
+        help="only judge items whose section or title contains TEXT (repeatable)",
+    )
     compare.add_argument("--report", type=Path, help="write an HTML report to this directory")
     compare.add_argument(
         "--yes-send-external", action="store_true",
@@ -56,6 +63,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--yes-send-external", action="store_true",
         help="consent to sending document text to an external service",
     )
+
+    override = sub.add_parser("override", help="record or revoke a human verdict for one item")
+    _add_common(override)
+    override.add_argument("pair", help="pair id")
+    override.add_argument("item_key", help="item key (from compare --json)")
+    override.add_argument("--status", default="", choices=("", *OVERRIDABLE))
+    override.add_argument("--reason", default="", help="why the machine verdict was wrong")
+    override.add_argument("--author", default="human")
+    override.add_argument("--revoke", action="store_true", help="drop the active override")
 
     snapshots = sub.add_parser("snapshots", help="inspect stored comparison rounds")
     _add_common(snapshots)
@@ -88,6 +104,8 @@ def _select_pairs(args: argparse.Namespace) -> list[Pair]:
 
 
 def _compare_one(pair: Pair, engine, store: Store, args: argparse.Namespace) -> dict:
+    if getattr(args, "scope", None):
+        pair = replace(pair, scope=tuple(args.scope))
     plan_text, documents = load_documents(pair)
     p_hash = plan_hash(plan_text)
     b_hash = bundle_hash(list(documents.items()))
@@ -99,7 +117,7 @@ def _compare_one(pair: Pair, engine, store: Store, args: argparse.Namespace) -> 
             "plan_hash": p_hash, "bundle_hash": b_hash,
             "generated_by": {"engine": latest["engine"], "model": latest["model"], "llm_calls": 0},
             "snapshot_id": latest["id"], "totals": json.loads(latest["totals"]),
-            **store.snapshot_detail(latest["id"]),
+            **service.snapshot_detail(store, latest["id"], pair.id),
         }
 
     result = compare_pair(pair, engine, store, force=args.force, find_extras=not args.no_extras)
@@ -149,6 +167,25 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_override(args: argparse.Namespace) -> int:
+    store = Store(args.root)
+    try:
+        if args.revoke:
+            print("revoked" if store.revoke_override(args.pair, args.item_key) else "no override")
+            return 0
+        if not args.status:
+            raise SystemExit("--status is required unless --revoke is given")
+        store.set_override(args.pair, args.item_key, args.status, args.reason, args.author)
+        rows = store.override_history(args.pair)
+    finally:
+        store.close()
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return 0
+    print(f"{args.item_key} -> {args.status} (by {args.author})")
+    return 0
+
+
 def cmd_snapshots(args: argparse.Namespace) -> int:
     store = Store(args.root)
     try:
@@ -177,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     handlers = {
         "pairs": cmd_pairs, "compare": cmd_compare, "serve": cmd_serve,
-        "snapshots": cmd_snapshots,
+        "override": cmd_override, "snapshots": cmd_snapshots,
     }
     try:
         return handlers[args.command](args)

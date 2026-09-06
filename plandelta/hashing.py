@@ -21,8 +21,8 @@ from typing import Iterable, Sequence
 # Algorithm versions. Bump when behaviour changes in a way that invalidates
 # previously cached verdicts.
 EXTRACTOR_VERSION = "2"  # v2: leaf headings only in the prose fallback
-MATCHER_VERSION = "1"
-PROMPT_VERSION = "3"  # v3: abstain unless a shortfall quote anchors partial/missed
+MATCHER_VERSION = "2"  # v2: scope-creep candidates filtered to prose
+PROMPT_VERSION = "4"  # v3: abstain unless a shortfall quote anchors partial/missed
 OUTPUT_SCHEMA = "2"  # v2: reply carries shortfall_quote
 
 _EMPHASIS_RE = re.compile(r"[*_`~]+")

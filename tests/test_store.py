@@ -8,7 +8,7 @@ from plandelta.discovery import discover
 from plandelta.engines.base import Engine, EngineInfo
 from plandelta.errors import EngineUnavailable
 from plandelta.judge import Verdict
-from plandelta.store import Store
+from plandelta.store import SCHEMA_VERSION, Store
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sample_root"
 
@@ -102,7 +102,7 @@ class StoreTest(unittest.TestCase):
         try:
             self.assertEqual(len(store.snapshots(self.pair.id)), 1)
             version = store.conn.execute("SELECT version FROM schema_version").fetchone()[0]
-            self.assertEqual(version, 2)
+            self.assertEqual(version, SCHEMA_VERSION)
         finally:
             store.close()
         self.store = Store(self.root)

@@ -99,6 +99,19 @@ blockquote {
 blockquote cite { display: block; color: var(--muted); font-size: .72rem; font-style: normal; }
 .empty { color: var(--muted); font-size: .9rem; padding: .5rem 0; }
 
+/* review queue */
+.override { border-top: 1px dashed var(--line); margin-top: .7rem; padding-top: .6rem; }
+.override-row { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; }
+.override-status, .override-reason {
+  font: inherit; font-size: .85rem; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: .25rem .45rem;
+}
+.override-reason { flex: 1 1 12rem; min-width: 0; }
+.btn-quiet {
+  font: inherit; font-size: .85rem; color: var(--muted); background: transparent;
+  border: 1px solid var(--line); border-radius: 6px; padding: .25rem .6rem; cursor: pointer;
+}
+
 .bg-exceeded { background: var(--exceeded); }
 .bg-done { background: var(--done); }
 .bg-partial { background: var(--partial); }

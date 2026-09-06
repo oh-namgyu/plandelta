@@ -118,6 +118,7 @@ python3 -m plandelta compare --root docs/plans --report out/ --json
 | `--base-url` | Endpoint for `openai-compatible` (e.g. `http://localhost:1234/v1`) |
 | `--force` | Re-judge everything, ignoring the cache |
 | `--report DIR` | Write a standalone HTML report per pair |
+| `--scope TEXT` | Only judge items whose section or title contains TEXT (repeatable) |
 | `--yes-send-external` | Consent to sending document text off the machine |
 
 ### Review it in a browser
@@ -137,6 +138,21 @@ requests without it. It also checks the `Host` header (so a page you visit
 cannot reach this port by DNS rebinding) and the `Origin` on anything that
 writes — recompare is a write, because it can send your documents to an external
 engine. It binds loopback unless you pass `--host`, which prints a warning.
+
+### Settle what the tool would not
+
+```bash
+python3 -m plandelta override checkout-v2 a1b2c3d4e5f6 \
+    --status done --reason "verified by hand against the staging deploy"
+python3 -m plandelta override checkout-v2 a1b2c3d4e5f6 --revoke
+```
+
+Abstaining is only useful if someone can close the loop, so `unknown` items —
+and any verdict you disagree with — can be settled by hand, in the CLI or from
+the review pane in the UI. The model's verdict is kept and shown next to yours
+rather than overwritten, superseded overrides are revoked rather than deleted,
+and the correction survives later comparisons: re-running the model does not
+quietly undo a human decision.
 
 ### Track it over time
 
@@ -178,7 +194,13 @@ verdict**, and a changed input is re-judged rather than papered over. In practic
 | `missed` | −2 | yes |
 | `extra` | 0 | counted separately as scope creep |
 | `unknown` | 0 | no — counted as missing coverage |
+| `out_of_scope` | 0 | no — set aside by `--scope` |
 | `error` | 0 | no |
+
+**Scope matters more than it sounds.** A completion report for phase one,
+compared against the whole plan, reads as abandonment: on the author's own
+plan the rate was 47.9% until the round was scoped, and 90.5% after, with the
+28 phase-two items counted separately instead of held against it.
 
 Completion rate is `points / (scored items × 3)`, clamped to 0–100%. The bonus
 from `exceeded` items and the penalty from `missed` items are reported
@@ -189,8 +211,6 @@ separately so neither can hide inside one percentage.
 - Markdown only. No Notion, Jira or Confluence connectors.
 - Items are extracted with rules (checkboxes, ordered lists, then headings for
   prose plans). Editing the extracted items by hand is not supported yet.
-- Overriding a verdict by hand is not supported yet; `unknown` items are
-  surfaced for a human to read, not corrected in place.
 - `extra` (unplanned work) detection is unstable run to run — treat it as a hint,
   not a metric.
 

@@ -26,6 +26,7 @@ class Totals:
     penalty: int
     coverage: float
     scope_creep: int
+    out_of_scope: int = 0
 
     def as_dict(self) -> dict:
         return {
@@ -37,21 +38,37 @@ class Totals:
             "coverage": self.coverage,
             "counts": self.counts,
             "scope_creep": self.scope_creep,
+            "out_of_scope": self.out_of_scope,
         }
 
 
 def summarize(verdicts: Sequence[Verdict], extras: Sequence[ExtraFinding] = ()) -> Totals:
-    counts = {status: 0 for status in POINTS}
-    for verdict in verdicts:
-        counts[verdict.status] = counts.get(verdict.status, 0) + 1
-    counts["extra"] = len(extras)
+    rows = [{"status": v.status, "points": v.points} for v in verdicts]
+    return summarize_rows(rows, len(extras))
 
-    scored = [v for v in verdicts if v.status in SCORED_STATUSES]
-    points = sum(v.points for v in scored)
+
+def summarize_rows(rows: Sequence[dict], scope_creep: int = 0) -> Totals:
+    """Totals from plain ``{status, points}`` rows.
+
+    Stored snapshots and human overrides both arrive as rows rather than
+    verdicts, and the headline numbers have to be recomputed from whatever the
+    reader is actually looking at — otherwise a corrected item changes colour in
+    the list while the percentage above it still quotes the model.
+    """
+    counts = {status: 0 for status in POINTS}
+    for row in rows:
+        counts[row["status"]] = counts.get(row["status"], 0) + 1
+    counts["extra"] = scope_creep
+
+    scored = [r for r in rows if r["status"] in SCORED_STATUSES]
+    points = sum(int(r["points"]) for r in scored)
     max_points = len(scored) * FULL_CREDIT
     rate = 0.0 if not max_points else max(0.0, min(100.0, 100.0 * points / max_points))
 
-    judged = [v for v in verdicts if v.status != "error"]
+    # Coverage answers "of the items this run was asked to judge, how many did
+    # it settle?" — so items ruled outside the round's scope are not part of the
+    # question, any more than engine failures are.
+    judged = [r for r in rows if r["status"] not in ("error", "out_of_scope")]
     coverage = 0.0 if not judged else 100.0 * len(scored) / len(judged)
 
     return Totals(
@@ -59,8 +76,9 @@ def summarize(verdicts: Sequence[Verdict], extras: Sequence[ExtraFinding] = ()) 
         rate=round(rate, 1),
         points=points,
         max_points=max_points,
-        bonus=sum(v.points - FULL_CREDIT for v in verdicts if v.status == "exceeded"),
-        penalty=sum(v.points for v in verdicts if v.status == "missed"),
+        out_of_scope=sum(1 for r in rows if r["status"] == "out_of_scope"),
+        bonus=sum(int(r["points"]) - FULL_CREDIT for r in rows if r["status"] == "exceeded"),
+        penalty=sum(int(r["points"]) for r in rows if r["status"] == "missed"),
         coverage=round(coverage, 1),
-        scope_creep=len(extras),
+        scope_creep=scope_creep,
     )

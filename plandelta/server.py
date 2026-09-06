@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import report, service
+from . import guards, report, service
 from .compare import compare_pair
 from .discovery import discover, resolve_in_root
 from .errors import PathDenied, PlandeltaError
@@ -24,16 +24,7 @@ from .hashing import read_text, toolchain_id
 from .store import Store
 
 DEFAULT_PORT = 6188
-# The page loads only its own stylesheet and script, talks only to this origin,
-# and never embeds anything. Stating that as policy means a successful injection
-# still has nowhere to send data and nothing to load.
-CSP = (
-    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
-    "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
-)
-MAX_BODY_BYTES = 1024 * 1024
 STATIC_DIR = Path(__file__).parent / "static"
-ALLOWED_HOSTS_SUFFIX = ("localhost", "127.0.0.1", "[::1]")
 
 
 class ServerState:
@@ -57,23 +48,6 @@ class ServerState:
         return Store(self.root)
 
 
-def _host_allowed(header: str, port: int) -> bool:
-    """Only names that resolve to this machine may address the server."""
-    if not header:
-        return False
-    name = header.rsplit(":", 1)[0] if header.count(":") == 1 else header
-    if header.startswith("["):
-        name = header.split("]")[0] + "]"
-    return name in ALLOWED_HOSTS_SUFFIX
-
-
-def _origin_allowed(origin: str, host: str) -> bool:
-    if not origin:
-        return False
-    parsed = urlparse(origin)
-    return bool(parsed.hostname) and parsed.hostname in ("localhost", "127.0.0.1", "::1")
-
-
 class Handler(BaseHTTPRequestHandler):
     server_version = "plandelta"
     state: ServerState
@@ -89,7 +63,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", CSP)
+        self.send_header("Content-Security-Policy", guards.CSP)
         self.send_header("X-Frame-Options", "DENY")
         self.end_headers()
         self.wfile.write(body)
@@ -103,14 +77,14 @@ class Handler(BaseHTTPRequestHandler):
     # -- guards ------------------------------------------------------------
 
     def _guard(self, *, writing: bool) -> bool:
-        if not _host_allowed(self.headers.get("Host", ""), self.state.port):
+        if not guards.host_allowed(self.headers.get("Host", "")):
             self._error("E_AUTH", "unrecognised Host header", 403)
             return False
         token = self._token()
         if not token or not secrets.compare_digest(token, self.state.token):
             self._error("E_AUTH", "missing or invalid session token", 401)
             return False
-        if writing and not _origin_allowed(self.headers.get("Origin", ""), self.state.host):
+        if writing and not guards.origin_allowed(self.headers.get("Origin", "")):
             self._error("E_AUTH", "missing or cross-site Origin", 403)
             return False
         return True
@@ -123,30 +97,12 @@ class Handler(BaseHTTPRequestHandler):
         return (query.get("token") or [""])[0]
 
     def _read_body(self) -> dict | None:
-        length = int(self.headers.get("Content-Length") or 0)
-        if length > MAX_BODY_BYTES:
-            self._drain(length)
-            self._error("E_DOC_TOO_LARGE", f"body exceeds {MAX_BODY_BYTES} bytes", 413)
-            return None
-        raw = self.rfile.read(length) if length else b"{}"
-        try:
-            return json.loads(raw or b"{}")
-        except json.JSONDecodeError:
-            self._error("E_SCHEMA", "body is not valid JSON")
-            return None
-
-    def _drain(self, length: int) -> None:
-        """Read and discard a rejected body so the client can finish writing.
-
-        Answering 413 without draining leaves the sender writing into a closed
-        pipe; the cap keeps a hostile sender from making us read forever.
-        """
-        remaining = min(length, MAX_BODY_BYTES * 4)
-        while remaining > 0:
-            chunk = self.rfile.read(min(65536, remaining))
-            if not chunk:
-                break
-            remaining -= len(chunk)
+        payload, error = guards.read_body(self.rfile, self.headers.get("Content-Length", ""))
+        if error == "E_DOC_TOO_LARGE":
+            self._error(error, f"body exceeds {guards.MAX_BODY_BYTES} bytes", 413)
+        elif error:
+            self._error(error, "body is not valid JSON")
+        return payload
 
     # -- routes ------------------------------------------------------------
 
@@ -199,8 +155,8 @@ class Handler(BaseHTTPRequestHandler):
         if snapshot is None:
             self._json({"pair_id": pair_id, "snapshot": None})
             return
-        detail = store.snapshot_detail(snapshot["id"])
-        totals = json.loads(snapshot["totals"])
+        detail = service.snapshot_detail(store, snapshot["id"], pair_id)
+        totals = detail["totals"]
         charts = {
             "donut": report.donut_svg(totals.get("counts", {})),
             "stack": report.stack_svg(detail["items"]),
@@ -213,7 +169,6 @@ class Handler(BaseHTTPRequestHandler):
                 "created_at": snapshot["created_at"],
                 "engine": snapshot["engine"],
                 "model": snapshot["model"],
-                "totals": json.loads(snapshot["totals"]),
                 "lineage": service.lineage_summary(detail["items"]),
                 "charts": charts,
                 **detail,
@@ -239,10 +194,14 @@ class Handler(BaseHTTPRequestHandler):
         route = urlparse(self.path).path
         if not self._guard(writing=True):
             return
+        body = self._read_body()
+        if body is None:
+            return
+        if route.startswith("/api/pairs/") and route.endswith("/override"):
+            self._override(route.split("/")[3], body)
+            return
         if not (route.startswith("/api/pairs/") and route.endswith("/recompare")):
             self._error("E_SCHEMA", f"unknown route: {route}", 404)
-            return
-        if self._read_body() is None:
             return
         if not self.state.compare_lock.acquire(blocking=False):
             self._error("E_SCHEMA", "a comparison is already running", 409)
@@ -253,6 +212,30 @@ class Handler(BaseHTTPRequestHandler):
             self._json(exc.as_dict(), 400)
         finally:
             self.state.compare_lock.release()
+
+    def _override(self, pair_id: str, body: dict) -> None:
+        """Record or revoke a person's verdict. Cheap, local, no engine call."""
+        item_key = str(body.get("item_key") or "")
+        if not item_key:
+            self._error("E_SCHEMA", "item_key is required")
+            return
+        with self.state.store_lock:
+            store = self.state.open_store()
+            try:
+                if body.get("revoke"):
+                    self._json({"revoked": store.revoke_override(pair_id, item_key)})
+                    return
+                try:
+                    store.set_override(
+                        pair_id, item_key, str(body.get("status") or ""),
+                        str(body.get("reason") or ""), str(body.get("author") or "human"),
+                    )
+                except ValueError as exc:
+                    self._error("E_SCHEMA", str(exc))
+                    return
+                self._json({"overrides": store.overrides(pair_id)})
+            finally:
+                store.close()
 
     def _recompare(self, pair_id: str) -> None:
         pair = next((p for p in discover(self.state.root).pairs if p.id == pair_id), None)
