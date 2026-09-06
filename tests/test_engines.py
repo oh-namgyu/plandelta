@@ -53,9 +53,9 @@ class ClaudeCliEngineTest(unittest.TestCase):
 
     def test_prompt_travels_on_stdin_not_argv(self) -> None:
         engine = ClaudeCliEngine(binary=write_binary(self.dir, "fake-ok", FAKE_OK))
-        secret = "PLAN DOCUMENT BODY that must not appear in argv"
-        self.assertEqual(engine.complete(secret), secret)
-        self.assertNotIn(secret, " ".join(engine._argv()))
+        document_text = "PLAN DOCUMENT BODY that must not appear in argv"
+        self.assertEqual(engine.complete(document_text), document_text)
+        self.assertNotIn(document_text, " ".join(engine._argv()))
 
     def test_model_pin_mismatch_is_rejected(self) -> None:
         engine = ClaudeCliEngine(binary=write_binary(self.dir, "fake-model", FAKE_WRONG_MODEL))
