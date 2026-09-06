@@ -245,6 +245,7 @@ def render_report(result) -> str:
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
 <title>plandelta — {_esc(result.pair.id)}</title>
 <style>{_CSS}</style></head>
 <body><div class="wrap">

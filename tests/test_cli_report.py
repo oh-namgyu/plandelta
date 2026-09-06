@@ -84,6 +84,10 @@ class ReportTest(unittest.TestCase):
         self.assertNotIn(" style=", html)
         self.assertIn("<style>", html)
 
+    def test_report_declares_a_content_security_policy(self) -> None:
+        html = render_report(self._result("prose-plan", all_done_reply(3, "The ingest service reads CSV")))
+        self.assertIn("default-src 'none'", html)
+
     def test_report_is_self_contained(self) -> None:
         html = render_report(self._result("prose-plan", all_done_reply(3, "The ingest service reads CSV")))
         for external in ("http://", "https://", "<script"):

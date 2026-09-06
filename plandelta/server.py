@@ -24,6 +24,13 @@ from .hashing import read_text, toolchain_id
 from .store import Store
 
 DEFAULT_PORT = 6188
+# The page loads only its own stylesheet and script, talks only to this origin,
+# and never embeds anything. Stating that as policy means a successful injection
+# still has nowhere to send data and nothing to load.
+CSP = (
+    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+    "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+)
 MAX_BODY_BYTES = 1024 * 1024
 STATIC_DIR = Path(__file__).parent / "static"
 ALLOWED_HOSTS_SUFFIX = ("localhost", "127.0.0.1", "[::1]")
@@ -82,6 +89,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy", CSP)
+        self.send_header("X-Frame-Options", "DENY")
         self.end_headers()
         self.wfile.write(body)
 

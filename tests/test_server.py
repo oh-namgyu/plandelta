@@ -114,6 +114,14 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(status, 413)
         self.assertEqual(payload["error"]["code"], "E_DOC_TOO_LARGE")
 
+    def test_responses_carry_a_restrictive_csp(self) -> None:
+        req = urllib.request.Request(self.url("/"), headers=self.auth())
+        with urllib.request.urlopen(req, timeout=10) as response:
+            policy = response.headers["Content-Security-Policy"]
+            self.assertIn("default-src 'none'", policy)
+            self.assertIn("connect-src 'self'", policy)
+            self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+
     def test_health_needs_no_token(self) -> None:
         status, payload = request(self.url("/api/health"))
         self.assertEqual(status, 200)
