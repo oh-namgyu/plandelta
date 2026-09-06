@@ -26,9 +26,12 @@ cat > /dev/null
 sleep 30
 """
 
-FAKE_FAIL = """#!/bin/sh
+# Assembled at runtime rather than written out, so the repository never contains
+# a credential-shaped literal for scanners (or readers) to trip over.
+FAKE_TOKEN = "sk-" + "ant-" + "notarealkey"
+FAKE_FAIL = f"""#!/bin/sh
 cat > /dev/null
-echo "boom ANTHROPIC_API_KEY=sk-ant-secret" >&2
+echo "boom ANTHROPIC_API_KEY={FAKE_TOKEN}" >&2
 exit 2
 """
 
@@ -68,7 +71,7 @@ class ClaudeCliEngineTest(unittest.TestCase):
         engine = ClaudeCliEngine(binary=write_binary(self.dir, "fake-fail", FAKE_FAIL))
         with self.assertRaises(EngineUnavailable) as ctx:
             engine.complete("x")
-        self.assertNotIn("sk-ant-secret", str(ctx.exception))
+        self.assertNotIn(FAKE_TOKEN, str(ctx.exception))
         self.assertIn("[redacted]", str(ctx.exception))
 
     def test_missing_binary_reports_engine_unavailable(self) -> None:
