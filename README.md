@@ -211,10 +211,12 @@ separately so neither can hide inside one percentage.
 - Markdown only. No Notion, Jira or Confluence connectors.
 - Items are extracted with rules (checkboxes, ordered lists, then headings for
   prose plans). Editing the extracted items by hand is not supported yet.
-- Unplanned-work detection finds what it retrieves, and it retrieves by vocabulary
-  overlap: work described in the plan's own words reads as planned. On the
-  author's corpus it reports the same result on every run with no false
-  positives, and finds one of the two known cases. Treat it as a hint.
+- Unplanned-work detection is a hint, not a verdict. On the author's five-pair
+  corpus it now finds three to four of the four known cases per run with about
+  one extra, but repeated runs do not agree on the borderline ones — a defensive
+  fix made during implementation, a CI runner swap, a security review patch.
+  Whether those count as unplanned delivery is a judgement people also disagree
+  about, so the list is worth reading and not worth measuring.
 
 ## Security
 

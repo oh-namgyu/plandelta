@@ -180,5 +180,39 @@ class ExtraCandidateTest(unittest.TestCase):
         self.assertEqual([e.quote[:16] for e in found], ["We also shipped "])
 
 
+
+
+class BulletSplitTest(unittest.TestCase):
+    def test_a_bullet_list_becomes_one_candidate_per_bullet(self) -> None:
+        from plandelta.matcher import split_bullets
+
+        block = Evidence("done.md", 10, 12, "- first thing shipped\n- second thing shipped\n- third", 0.0)
+        parts = split_bullets(block)
+        self.assertEqual([p.quote for p in parts],
+                         ["- first thing shipped", "- second thing shipped", "- third"])
+        self.assertEqual([p.line_start for p in parts], [10, 11, 12])
+
+    def test_continuation_lines_stay_with_their_bullet(self) -> None:
+        from plandelta.matcher import split_bullets
+
+        block = Evidence("done.md", 5, 8, "- first\n  continued here\n- second\n  also continued", 0.0)
+        parts = split_bullets(block)
+        self.assertEqual(len(parts), 2)
+        self.assertIn("continued here", parts[0].quote)
+        self.assertIn("also continued", parts[1].quote)
+
+    def test_prose_without_bullets_is_left_alone(self) -> None:
+        from plandelta.matcher import split_bullets
+
+        block = Evidence("done.md", 1, 2, "We shipped the exporter.\nIt streams.", 0.0)
+        self.assertEqual(split_bullets(block), [block])
+
+    def test_a_single_bullet_is_left_alone(self) -> None:
+        from plandelta.matcher import split_bullets
+
+        block = Evidence("done.md", 1, 1, "- only one bullet here", 0.0)
+        self.assertEqual(split_bullets(block), [block])
+
+
 if __name__ == "__main__":
     unittest.main()

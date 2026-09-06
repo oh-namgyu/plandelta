@@ -35,6 +35,11 @@ META_MARKERS = (
     "다음 작업자", "첫 액션", "잔여", "후속", "todo", "next:",
 )
 MIN_EXTRA_WORDS = 8
+# A paragraph can share the plan's vocabulary and still be mostly new work. The
+# one-sided test ("does this resemble a plan item?") misses exactly that case, so
+# a paragraph also becomes a candidate when most of what it says is unexplained
+# by any plan item.
+UNCOVERED_THRESHOLD = 0.6
 
 
 @dataclass(frozen=True)
@@ -131,19 +136,66 @@ def is_prose(paragraph: Evidence) -> bool:
     return not any(marker in lowered for marker in META_MARKERS)
 
 
+BULLET_RE = re.compile(r"^\s*[-*+]\s+\S")
+
+
+def split_bullets(paragraph: Evidence) -> list[Evidence]:
+    """Split a bullet list into one candidate per bullet.
+
+    A nine-line list that mixes planned and unplanned work is not a unit anyone
+    can answer yes or no about, and asking anyway produced a different answer on
+    each run. One bullet is one claim.
+    """
+    lines = paragraph.quote.split("\n")
+    starts = [index for index, line in enumerate(lines) if BULLET_RE.match(line)]
+    if len(starts) < 2:
+        return [paragraph]
+    out: list[Evidence] = []
+    bounds = starts + [len(lines)]
+    for first, last in zip(bounds, bounds[1:]):
+        text = "\n".join(lines[first:last]).strip()
+        if not text:
+            continue
+        out.append(
+            Evidence(
+                paragraph.file,
+                paragraph.line_start + first,
+                paragraph.line_start + last - 1,
+                text,
+                paragraph.score,
+            )
+        )
+    return out
+
+
+def uncovered_ratio(para_tokens: Sequence[str], plan_vocabulary: set[str]) -> float:
+    """Share of the paragraph's distinctive words that no plan item uses."""
+    tokens = set(para_tokens)
+    if not tokens:
+        return 0.0
+    return len(tokens - plan_vocabulary) / len(tokens)
+
+
 def extra_candidates(
     items: Sequence[PlanItem],
     paragraphs: Sequence[Evidence],
     threshold: float = EXTRA_THRESHOLD,
+    uncovered: float = UNCOVERED_THRESHOLD,
 ) -> list[Evidence]:
-    """Completion prose that matches no plan item — scope creep candidates."""
+    """Completion prose the plan does not account for — scope creep candidates.
+
+    Two ways in, because one is not enough: a paragraph that resembles no plan
+    item, or a paragraph that mostly says things no plan item says.
+    """
     item_tokens = [set(tokenize(f"{i.title} {i.body}")) for i in items]
+    vocabulary: set[str] = set().union(*item_tokens) if item_tokens else set()
     out: list[Evidence] = []
-    for para in paragraphs:
-        if not is_prose(para):
-            continue
-        tokens = tokenize(para.quote)
-        best = max((_overlap(t, tokens) for t in item_tokens), default=0.0)
-        if best < threshold:
-            out.append(Evidence(para.file, para.line_start, para.line_end, para.quote, best))
+    for block in paragraphs:
+        for para in split_bullets(block):
+            if not is_prose(para):
+                continue
+            tokens = tokenize(para.quote)
+            best = max((_overlap(t, tokens) for t in item_tokens), default=0.0)
+            if best < threshold or uncovered_ratio(tokens, vocabulary) > uncovered:
+                out.append(Evidence(para.file, para.line_start, para.line_end, para.quote, best))
     return out

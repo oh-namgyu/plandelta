@@ -21,8 +21,8 @@ from typing import Iterable, Sequence
 # Algorithm versions. Bump when behaviour changes in a way that invalidates
 # previously cached verdicts.
 EXTRACTOR_VERSION = "2"  # v2: leaf headings only in the prose fallback
-MATCHER_VERSION = "3"  # v3: meta-line filter applies to the first line only
-PROMPT_VERSION = "6"  # v6: scope creep asked per candidate, not as free-form search  # v3: abstain unless a shortfall quote anchors partial/missed
+MATCHER_VERSION = "5"  # v5: one bullet is one scope-creep candidate
+PROMPT_VERSION = "7"  # v7: work belonging to another project is not scope creep  # v3: abstain unless a shortfall quote anchors partial/missed
 OUTPUT_SCHEMA = "2"  # v2: reply carries shortfall_quote
 
 _EMPHASIS_RE = re.compile(r"[*_`~]+")
