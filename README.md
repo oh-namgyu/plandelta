@@ -1,5 +1,6 @@
 # plandelta
 
+[![CI](https://github.com/oh-namgyu/plandelta/actions/workflows/ci.yml/badge.svg)](https://github.com/oh-namgyu/plandelta/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > **한글 요약**
@@ -20,6 +21,8 @@ python3 -m plandelta pairs --root docs/plans
 python3 -m plandelta compare my-project --root docs/plans \
     --yes-send-external --report out/
 ```
+
+![The review UI: KPI row, status donut, per-round trend, and a plan/evidence split](docs/plandelta-ui.png)
 
 ## Why
 
@@ -201,4 +204,4 @@ path traversal) and the subprocess hardening.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Security policy: [SECURITY.md](SECURITY.md).

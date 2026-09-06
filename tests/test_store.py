@@ -125,6 +125,14 @@ class StoreTest(unittest.TestCase):
         finally:
             target.write_text(original, encoding="utf-8")
 
+    def test_first_round_marks_nothing_as_added(self) -> None:
+        """"added" means "since last round"; a first comparison has no last round."""
+        result = compare_pair(
+            self.pair, ScriptedEngine([all_done_reply(3, "The ingest service reads CSV files")]),
+            self.store, find_extras=False,
+        )
+        self.assertEqual(set(result.lineage.values()), {"same"})
+
     def test_snapshot_write_is_atomic(self) -> None:
         result = compare_pair(
             self.pair, ScriptedEngine([all_done_reply(3, "The ingest service reads CSV files")]),

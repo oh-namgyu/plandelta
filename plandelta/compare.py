@@ -79,7 +79,13 @@ def _paragraphs(documents: dict[str, str]) -> list[Evidence]:
 
 
 def _lineage(items: Sequence[PlanItem], previous: dict[str, str]) -> dict[str, str]:
-    """Label each item ``same`` / ``renamed`` / ``added`` against last round."""
+    """Label each item ``same`` / ``renamed`` / ``added`` against last round.
+
+    With no previous round there is nothing to have been added *to*, so a first
+    comparison reports every item as unchanged rather than as new.
+    """
+    if not previous:
+        return {item.key: "same" for item in items}
     out: dict[str, str] = {}
     unmatched = dict(previous)
     for item in items:

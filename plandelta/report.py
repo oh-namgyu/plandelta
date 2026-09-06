@@ -156,10 +156,23 @@ def trend_svg(points: Sequence[dict]) -> str:
             f'round {points[i]["round"]}: {key} {points[i].get(key, 0):.1f}%</title></circle>'
             for i, (x, y) in enumerate(pts)
         )
+    ticks = "".join(
+        f'<line x1="{pad}" y1="{height - pad - (height - 2 * pad) * value / 100:.1f}" '
+        f'x2="{width - pad}" y2="{height - pad - (height - 2 * pad) * value / 100:.1f}" '
+        f'stroke="var(--line)" stroke-dasharray="2 3"/>'
+        f'<text x="{pad - 4}" y="{height - pad - (height - 2 * pad) * value / 100 + 3:.1f}" '
+        f'text-anchor="end" font-size="9" fill="var(--muted)">{value}</text>'
+        for value in (0, 50, 100)
+    )
+    labels = "".join(
+        f'<text x="{pad + (width - 2 * pad) * index / span:.1f}" y="{height - pad + 12}" '
+        f'text-anchor="middle" font-size="9" fill="var(--muted)">#{point["round"]}</text>'
+        for index, point in enumerate(points)
+    )
     axis = (
-        f'<line x1="{pad}" y1="{height - pad}" x2="{width - pad}" y2="{height - pad}" '
-        f'stroke="var(--line)"/>'
-        f'<line x1="{pad}" y1="{pad}" x2="{pad}" y2="{height - pad}" stroke="var(--line)"/>'
+        ticks
+        + f'<line x1="{pad}" y1="{pad}" x2="{pad}" y2="{height - pad}" stroke="var(--line)"/>'
+        + labels
     )
     return (
         f'<svg viewBox="0 0 {width} {height}" width="100%" height="{height}" role="img" '

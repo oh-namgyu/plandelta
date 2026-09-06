@@ -192,6 +192,11 @@ function renderRounds(rounds) {
 
 async function selectPair(pairId) {
   state.current = pairId;
+  // Keep the address bar pointing at what is on screen, so a view can be
+  // bookmarked, shared with a colleague, or screenshotted reproducibly.
+  const address = new URL(location.href);
+  address.searchParams.set("pair", pairId);
+  history.replaceState(null, "", address);
   renderPairs();
   setStatus("loading…");
   const pair = state.pairs.find((candidate) => candidate.id === pairId);
@@ -236,7 +241,10 @@ async function recompare() {
 
 async function load(keepPairId) {
   state.pairs = await api("/api/pairs");
-  const target = keepPairId || (state.pairs[0] && state.pairs[0].id);
+  const requested = new URLSearchParams(location.search).get("pair");
+  const known = (id) => state.pairs.some((pair) => pair.id === id);
+  const target =
+    keepPairId || (known(requested) ? requested : null) || (state.pairs[0] && state.pairs[0].id);
   renderPairs();
   if (target) await selectPair(target);
   else setStatus("no pairs discovered under this root");
