@@ -178,7 +178,7 @@ def _find_extras(
         return [], 0
     try:
         reply = engine.complete(judge.build_extra_prompt(items, candidates))
-        return judge.extras_from_reply(reply, documents), 1
+        return judge.extras_from_reply(reply, documents, candidates), 1
     except PlandeltaError:
         return [], 1
 

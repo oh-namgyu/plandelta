@@ -211,8 +211,10 @@ separately so neither can hide inside one percentage.
 - Markdown only. No Notion, Jira or Confluence connectors.
 - Items are extracted with rules (checkboxes, ordered lists, then headings for
   prose plans). Editing the extracted items by hand is not supported yet.
-- `extra` (unplanned work) detection is unstable run to run — treat it as a hint,
-  not a metric.
+- Unplanned-work detection finds what it retrieves, and it retrieves by vocabulary
+  overlap: work described in the plan's own words reads as planned. On the
+  author's corpus it reports the same result on every run with no false
+  positives, and finds one of the two known cases. Treat it as a hint.
 
 ## Security
 

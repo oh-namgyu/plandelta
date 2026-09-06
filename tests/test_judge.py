@@ -82,13 +82,20 @@ class JudgeTest(unittest.TestCase):
     def test_short_quotes_never_verify(self) -> None:
         self.assertFalse(verify_quote("CLI", DOCS))
 
-    def test_extras_require_real_quotes(self) -> None:
-        good = '{"extras": [{"file": "done.md", "line_start": 2, "line_end": 2,' \
-               ' "quote": "Load testing reached 300 rps", "reason": "unplanned"}]}'
-        bad = '{"extras": [{"file": "done.md", "line_start": 2, "line_end": 2,' \
-              ' "quote": "we also shipped a mobile app", "reason": "unplanned"}]}'
-        self.assertEqual(len(extras_from_reply(good, DOCS)), 1)
-        self.assertEqual(extras_from_reply(bad, DOCS), [])
+    def test_extras_come_from_the_candidate_we_sent(self) -> None:
+        candidates = [Evidence("done.md", 2, 2, "Load testing reached 300 rps", 0.0)]
+        payload = '{"candidates": [{"index": 0, "unplanned": true, "reason": "unplanned"}]}'
+        found = extras_from_reply(payload, DOCS, candidates)
+        self.assertEqual([f.evidence.quote for f in found], ["Load testing reached 300 rps"])
+
+    def test_candidates_marked_planned_are_not_reported(self) -> None:
+        candidates = [Evidence("done.md", 2, 2, "Load testing reached 300 rps", 0.0)]
+        payload = '{"candidates": [{"index": 0, "unplanned": false, "reason": "planned"}]}'
+        self.assertEqual(extras_from_reply(payload, DOCS, candidates), [])
+
+    def test_an_index_outside_the_candidate_list_is_ignored(self) -> None:
+        payload = '{"candidates": [{"index": 7, "unplanned": true}]}'
+        self.assertEqual(extras_from_reply(payload, DOCS, []), [])
 
 
 class ScoringTest(unittest.TestCase):

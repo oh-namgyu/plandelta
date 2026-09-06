@@ -124,7 +124,10 @@ def is_prose(paragraph: Evidence) -> bool:
     first = text.splitlines()[0].strip()
     if first.startswith(NOISE_PREFIXES):
         return False
-    lowered = text.lower()
+    # Front matter announces itself on the first line. Scanning the whole block
+    # threw away real paragraphs because one later line happened to say
+    # "검증:" — a multi-line bullet list is one block here.
+    lowered = first.lower()
     return not any(marker in lowered for marker in META_MARKERS)
 
 
