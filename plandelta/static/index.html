@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>plandelta</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand">plandelta</span>
+  <label class="field"><span>Pair</span>
+    <select id="pair-select"></select>
+  </label>
+  <label class="field"><span>Round</span>
+    <select id="round-select"></select>
+  </label>
+  <button id="recompare" class="btn-primary" type="button">Recompare</button>
+  <span id="status-line" class="muted"></span>
+</header>
+
+<main class="layout">
+  <aside class="sidebar">
+    <h2 class="section-title">Pairs</h2>
+    <ul id="pair-list" class="pair-list"></ul>
+  </aside>
+
+  <section class="content">
+    <div id="kpis" class="kpis"></div>
+
+    <div class="charts">
+      <section class="card"><h2 class="section-title">Status distribution</h2>
+        <div id="chart-donut"></div></section>
+      <section class="card"><h2 class="section-title">Rate per round</h2>
+        <div id="chart-trend"></div></section>
+      <section class="card"><h2 class="section-title">Per-item score</h2>
+        <div id="chart-stack" class="scroll-x"></div></section>
+    </div>
+
+    <div class="split">
+      <section class="card pane">
+        <h2 class="section-title">Plan <span id="plan-name" class="muted"></span></h2>
+        <div id="plan-items" class="pane-body"></div>
+      </section>
+      <section class="card pane">
+        <h2 class="section-title">Evidence <span id="done-name" class="muted"></span></h2>
+        <div id="evidence-body" class="pane-body"></div>
+      </section>
+    </div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

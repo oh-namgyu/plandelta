@@ -33,3 +33,6 @@ Issues = "https://github.com/oh-namgyu/plandelta/issues"
 
 [tool.setuptools]
 packages = ["plandelta", "plandelta.engines"]
+
+[tool.setuptools.package-data]
+plandelta = ["static/*"]

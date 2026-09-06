@@ -13,6 +13,7 @@ from .engines import DEFAULT_ENGINE, ENGINE_IDS, build_engine, require_consent
 from .errors import PlandeltaError
 from .hashing import bundle_hash, plan_hash, toolchain_id
 from .report import render_report
+from .server import DEFAULT_PORT, serve
 from .store import Store
 
 
@@ -39,6 +40,19 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--no-extras", action="store_true", help="skip unplanned-work detection")
     compare.add_argument("--report", type=Path, help="write an HTML report to this directory")
     compare.add_argument(
+        "--yes-send-external", action="store_true",
+        help="consent to sending document text to an external service",
+    )
+
+    ui = sub.add_parser("serve", help="review comparisons in a local web UI")
+    _add_common(ui)
+    ui.add_argument("--engine", default=DEFAULT_ENGINE, choices=ENGINE_IDS)
+    ui.add_argument("--model", default="", help="pin the model (default: engine's default)")
+    ui.add_argument("--base-url", default="", help="openai-compatible endpoint")
+    ui.add_argument("--timeout", type=int, default=120, help="per-call timeout in seconds")
+    ui.add_argument("--host", default="127.0.0.1", help="bind address (loopback by default)")
+    ui.add_argument("--port", type=int, default=DEFAULT_PORT)
+    ui.add_argument(
         "--yes-send-external", action="store_true",
         help="consent to sending document text to an external service",
     )
@@ -126,6 +140,15 @@ def cmd_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    engine = build_engine(
+        args.engine, model=args.model, base_url=args.base_url, timeout=args.timeout
+    )
+    require_consent(args.root, engine.info, granted_now=args.yes_send_external)
+    serve(args.root, engine, host=args.host, port=args.port)
+    return 0
+
+
 def cmd_snapshots(args: argparse.Namespace) -> int:
     store = Store(args.root)
     try:
@@ -152,7 +175,10 @@ def cmd_snapshots(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    handlers = {"pairs": cmd_pairs, "compare": cmd_compare, "snapshots": cmd_snapshots}
+    handlers = {
+        "pairs": cmd_pairs, "compare": cmd_compare, "serve": cmd_serve,
+        "snapshots": cmd_snapshots,
+    }
     try:
         return handlers[args.command](args)
     except PlandeltaError as exc:

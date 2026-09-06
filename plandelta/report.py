@@ -68,7 +68,7 @@ def _esc(text: str) -> str:
     return html.escape(str(text), quote=True)
 
 
-def _donut(counts: dict[str, int]) -> str:
+def donut_svg(counts: dict[str, int]) -> str:
     """Hand-drawn donut: one stroked arc per status, no chart library."""
     total = sum(counts.get(s, 0) for s in DONUT_ORDER)
     if not total:
@@ -99,24 +99,73 @@ def _donut(counts: dict[str, int]) -> str:
     )
 
 
-def _stack(verdicts: Sequence[Verdict]) -> str:
-    """One row per item: a bar whose colour is the status."""
-    if not verdicts:
+def stack_svg(rows: Sequence[dict]) -> str:
+    """One bar per item, coloured by status.
+
+    Takes plain dicts (``status``/``title``/``points``) so the HTML report and
+    the live UI draw the identical chart from the same code path.
+    """
+    if not rows:
         return '<p class="sub">No items.</p>'
     row_height, gap = 16, 4
-    height = len(verdicts) * (row_height + gap)
+    height = len(rows) * (row_height + gap)
     bars = []
-    for index, verdict in enumerate(verdicts):
-        width = {"exceeded": 100, "done": 78, "partial": 40, "missed": 22}.get(verdict.status, 12)
+    for index, row in enumerate(rows):
+        status = row["status"]
+        width = {"exceeded": 100, "done": 78, "partial": 40, "missed": 22}.get(status, 12)
         bars.append(
             f'<rect x="0" y="{index * (row_height + gap)}" width="{width}%" height="{row_height}" '
-            f'rx="3" fill="var(--{verdict.status})"><title>'
-            f'{_esc(verdict.item.title)} — {STATUS_LABELS[verdict.status]} '
-            f'({verdict.points:+d})</title></rect>'
+            f'rx="3" fill="var(--{status})"><title>'
+            f'{_esc(row["title"])} — {STATUS_LABELS.get(status, status)} '
+            f'({int(row["points"]):+d})</title></rect>'
         )
     return (
         f'<svg viewBox="0 0 100 {height}" width="100%" height="{height}" preserveAspectRatio="none" '
         f'role="img" aria-label="per-item scores">{"".join(bars)}</svg>'
+    )
+
+
+def trend_svg(points: Sequence[dict]) -> str:
+    """Completion rate and evidence coverage across rounds, drawn by hand.
+
+    One round is a dot, not a line — a single snapshot has no trend, and drawing
+    a flat line through it would imply stability nobody measured.
+    """
+    if not points:
+        return '<p class="sub">No rounds recorded yet.</p>'
+    width, height, pad = 420, 160, 26
+    span = max(len(points) - 1, 1)
+
+    def coords(key: str) -> list[tuple[float, float]]:
+        return [
+            (
+                pad + (width - 2 * pad) * index / span,
+                height - pad - (height - 2 * pad) * min(float(p.get(key, 0)), 100.0) / 100.0,
+            )
+            for index, p in enumerate(points)
+        ]
+
+    layers = []
+    for key, colour in (("coverage", "var(--unknown)"), ("rate", "var(--done)")):
+        pts = coords(key)
+        if len(pts) > 1:
+            path = " ".join(f"{'M' if i == 0 else 'L'}{x:.1f},{y:.1f}" for i, (x, y) in enumerate(pts))
+            layers.append(f'<path d="{path}" fill="none" stroke="{colour}" stroke-width="2"/>')
+        layers.extend(
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="{colour}"><title>'
+            f'round {points[i]["round"]}: {key} {points[i].get(key, 0):.1f}%</title></circle>'
+            for i, (x, y) in enumerate(pts)
+        )
+    axis = (
+        f'<line x1="{pad}" y1="{height - pad}" x2="{width - pad}" y2="{height - pad}" '
+        f'stroke="var(--line)"/>'
+        f'<line x1="{pad}" y1="{pad}" x2="{pad}" y2="{height - pad}" stroke="var(--line)"/>'
+    )
+    return (
+        f'<svg viewBox="0 0 {width} {height}" width="100%" height="{height}" role="img" '
+        f'aria-label="completion rate per round">{axis}{"".join(layers)}</svg>'
+        f'<ul class="legend"><li><span class="swatch bg-done"></span>Completion rate</li>'
+        f'<li><span class="swatch bg-unknown"></span>Evidence coverage</li></ul>'
     )
 
 
@@ -191,8 +240,8 @@ def render_report(result) -> str:
 {_esc(", ".join(p.name for p in result.pair.done))}</p>
 <div class="kpis">{_kpis(totals)}</div>
 <div class="charts">
-  <section class="card"><h2>Status distribution</h2>{_donut(totals.counts)}</section>
-  <section class="card"><h2>Per-item score</h2><div class="table-scroll">{_stack(result.verdicts)}</div></section>
+  <section class="card"><h2>Status distribution</h2>{donut_svg(totals.counts)}</section>
+  <section class="card"><h2>Per-item score</h2><div class="table-scroll">{stack_svg([{"status": v.status, "title": v.item.title, "points": v.points} for v in result.verdicts])}</div></section>
 </div>
 <h2>Items ({len(result.verdicts)})</h2>
 {items}

@@ -92,9 +92,15 @@ Either write `plandelta.pairs.json`:
 ```
 
 …or let the default globs do it: `<slug>_final.md` (falling back to
-`<slug>_draft.md`) pairs with `<slug>_completion.md`, and `<slug>_verify.md` /
-`<slug>_status.json` join the bundle when they exist. A plan with no completion
+`<slug>_draft.md`) pairs with `<slug>_completion.md`. A plan with no completion
 document is skipped with a reason rather than silently dropped.
+
+Only documents that *report what was delivered* are in a bundle by default. That
+rule was learned the hard way: an earlier version also pulled in `_verify.md`,
+which in the author's corpus is a pre-implementation review of the plan, and the
+judge read "the rollback procedure is undefined" — a complaint about the plan —
+as proof that rollback never shipped. If your review notes do describe delivery,
+add them explicitly through the manifest.
 
 ### Compare
 
@@ -110,6 +116,24 @@ python3 -m plandelta compare --root docs/plans --report out/ --json
 | `--force` | Re-judge everything, ignoring the cache |
 | `--report DIR` | Write a standalone HTML report per pair |
 | `--yes-send-external` | Consent to sending document text off the machine |
+
+### Review it in a browser
+
+```bash
+python3 -m plandelta serve --root docs/plans --yes-send-external
+# plandelta UI: http://127.0.0.1:6188/?token=…
+```
+
+One page: the pair list with a dot on anything that drifted since its last
+comparison, the KPI row, three charts (status donut, completion rate per round,
+per-item score), and a plan/evidence split where clicking a promise shows the
+quotes the verdict rests on.
+
+The URL carries a session token minted at startup, and the server refuses
+requests without it. It also checks the `Host` header (so a page you visit
+cannot reach this port by DNS rebinding) and the `Origin` on anything that
+writes — recompare is a write, because it can send your documents to an external
+engine. It binds loopback unless you pass `--host`, which prints a warning.
 
 ### Track it over time
 
@@ -164,8 +188,8 @@ separately so neither can hide inside one percentage.
   prose plans). Editing the extracted items by hand is not supported yet.
 - Overriding a verdict by hand is not supported yet; `unknown` items are
   surfaced for a human to read, not corrected in place.
-- The web UI (live pairs list, trend charts, side-by-side source view) is the
-  next phase; today the output is JSON and a static HTML report.
+- `extra` (unplanned work) detection is unstable run to run — treat it as a hint,
+  not a metric.
 
 ## Security
 
