@@ -37,10 +37,36 @@ class JudgeTest(unittest.TestCase):
         self.assertEqual(out[0].status, "unknown")
         self.assertEqual(out[0].evidence, [])
 
-    def test_missed_survives_without_evidence(self) -> None:
-        payload = '{"verdicts": [{"index": 1, "status": "missed", "reason": "300 rps only"}]}'
+    def test_missed_needs_a_quote_that_states_the_shortfall(self) -> None:
+        payload = (
+            '{"verdicts": [{"index": 1, "status": "missed", "reason": "300 rps only",'
+            ' "shortfall_quote": "Load testing reached 300 rps"}]}'
+        )
         out = verdicts_from_reply(payload, ITEMS, DOCS)
         self.assertEqual(out[1].status, "missed")
+        self.assertEqual(out[1].evidence[0].quote, "Load testing reached 300 rps")
+
+    def test_missed_without_a_shortfall_quote_abstains(self) -> None:
+        payload = '{"verdicts": [{"index": 1, "status": "missed", "reason": "300 rps only"}]}'
+        out = verdicts_from_reply(payload, ITEMS, DOCS)
+        self.assertEqual(out[1].status, "unknown")
+        self.assertIn("shortfall", out[1].reason)
+
+    def test_partial_without_a_shortfall_quote_abstains(self) -> None:
+        payload = (
+            '{"verdicts": [{"index": 0, "status": "partial", "reason": "docs missing",'
+            ' "evidence": [{"file": "done.md", "line_start": 1, "line_end": 1,'
+            ' "quote": "The CLI is finished"}]}]}'
+        )
+        out = verdicts_from_reply(payload, ITEMS, DOCS)
+        self.assertEqual(out[0].status, "unknown")
+
+    def test_partial_with_an_unverifiable_shortfall_quote_abstains(self) -> None:
+        payload = (
+            '{"verdicts": [{"index": 0, "status": "partial", "reason": "docs missing",'
+            ' "shortfall_quote": "the documentation was never written"}]}'
+        )
+        self.assertEqual(verdicts_from_reply(payload, ITEMS, DOCS)[0].status, "unknown")
 
     def test_unknown_status_and_bad_index_are_ignored(self) -> None:
         payload = '{"verdicts": [{"index": 9, "status": "done"}, {"index": 0, "status": "nope"}]}'

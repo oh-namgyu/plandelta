@@ -115,6 +115,32 @@ def _judge_batch(
     return {}  # pragma: no cover - unreachable
 
 
+def _batches(
+    pending: Sequence[PlanItem], evidence: dict[str, list[Evidence]]
+) -> list[list[PlanItem]]:
+    """Split by prompt size, not just item count.
+
+    Measured: a nine-item batch from a prose plan (whole sections as item bodies)
+    timed out twice at 120s, while ten short checkbox items finish in seconds.
+    Item count alone is the wrong unit.
+    """
+    out: list[list[PlanItem]] = []
+    batch: list[PlanItem] = []
+    size = 0
+    for item in pending:
+        cost = len(item.body[: judge.MAX_BODY_CHARS]) + sum(
+            len(e.quote[: judge.MAX_QUOTE_CHARS]) for e in evidence.get(item.key, [])
+        )
+        if batch and (len(batch) >= judge.BATCH_SIZE or size + cost > judge.BATCH_CHAR_BUDGET):
+            out.append(batch)
+            batch, size = [], 0
+        batch.append(item)
+        size += cost
+    if batch:
+        out.append(batch)
+    return out
+
+
 def _judge_items(
     engine: Engine, pending: Sequence[PlanItem], evidence: dict[str, list[Evidence]],
     documents: dict[str, str],
@@ -122,8 +148,7 @@ def _judge_items(
     """Judge uncached items in batches; a failed batch degrades to ``error``."""
     out: dict[str, judge.Verdict] = {}
     calls = 0
-    for start in range(0, len(pending), judge.BATCH_SIZE):
-        batch = list(pending[start : start + judge.BATCH_SIZE])
+    for batch in _batches(pending, evidence):
         calls += 1
         try:
             got = _judge_batch(engine, batch, evidence, documents)
@@ -229,6 +254,10 @@ def is_unchanged(store, pair: Pair, p_hash: str, b_hash: str, toolchain: str) ->
     """
     latest = store.latest_snapshot(pair.id) if store else None
     if not latest:
+        return False
+    if store.snapshot_has_errors(latest["id"]):
+        # A timeout is not an answer. Freezing a failed round until the documents
+        # happen to change would make a transient outage permanent.
         return False
     return (
         latest["plan_hash"] == p_hash

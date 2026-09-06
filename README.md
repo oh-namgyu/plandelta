@@ -49,10 +49,20 @@ with it.
 + unplanned  0   "We also added a --watch mode nobody asked for."
 ```
 
-`unknown` is the status that makes the rest trustworthy. When the retrieval
-step fails to find anything about an item, plandelta says so instead of scoring
-it as a broken promise, and the report shows **evidence coverage** next to the
-completion rate so a confident-looking number is never read out of context.
+`unknown` is the status that makes the rest trustworthy. plandelta abstains
+rather than guesses, and it does so under two rules:
+
+- **A claim needs evidence.** `done` and `exceeded` require a quote that occurs
+  verbatim in the completion documents. An unverifiable quote is dropped, and a
+  claim left without one becomes `unknown`.
+- **A shortfall needs to be stated.** `partial` and `missed` require a quote
+  that *says* the unmet part — deferred, dropped, reduced, or short of a stated
+  number. Silence about part of an item is not a shortfall, so it abstains
+  instead of reading as a broken promise.
+
+The report shows **evidence coverage** next to the completion rate, so a
+confident-looking number is never read out of context: 90% completion at 40%
+coverage means the tool judged very little, not that the work went well.
 
 ## Install
 
@@ -117,7 +127,13 @@ appearing as a deletion plus an addition.
 
 A verdict is cached against a fingerprint of everything that could change it:
 the item text, the retrieved evidence *and its wording*, the prompt version,
-the algorithm versions, and the engine and model. In practice:
+the algorithm versions, and the engine and model.
+
+That cache is also where reproducibility comes from. The HTTP engines are called
+with `temperature: 0`, but the `claude` CLI exposes no such flag, so two fresh
+runs of the default engine can disagree on a borderline item. What plandelta
+guarantees is narrower and more useful: **the same inputs return the same stored
+verdict**, and a changed input is re-judged rather than papered over. In practice:
 
 - documents unchanged → no snapshot, no model call, sub-second exit;
 - one line edited in a completion report → only the items whose evidence moved

@@ -82,6 +82,15 @@ class StoreTest(unittest.TestCase):
             is_unchanged(self.store, self.pair, result.plan_hash, result.bundle_hash, "t2")
         )
 
+    def test_a_snapshot_with_errors_is_not_treated_as_unchanged(self) -> None:
+        """A failed round must be retried, not frozen until the documents change."""
+        result = self._run(ScriptedEngine([all_done_reply(3, "The ingest service reads CSV files")]))
+        self.store.conn.execute("UPDATE items SET status = 'error' WHERE rowid = 1")
+        self.store.conn.commit()
+        self.assertFalse(
+            is_unchanged(self.store, self.pair, result.plan_hash, result.bundle_hash, "t1")
+        )
+
     def test_v1_database_upgrades_in_place(self) -> None:
         self._run(ScriptedEngine([all_done_reply(3, "The ingest service reads CSV files")]))
         self.store.close()

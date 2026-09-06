@@ -195,6 +195,13 @@ class Store:
         ]
         return {"items": items, "extras": extras}
 
+    def snapshot_has_errors(self, snapshot_id: int) -> bool:
+        """Did this round leave any item unjudged because the engine failed?"""
+        row = self.conn.execute(
+            "SELECT 1 FROM items WHERE snapshot_id = ? AND status = 'error' LIMIT 1", (snapshot_id,)
+        ).fetchone()
+        return row is not None
+
     def previous_items(self, pair_id: str) -> dict[str, str]:
         """``item_key`` → title from the newest snapshot, for lineage matching."""
         snapshot = self.latest_snapshot(pair_id)

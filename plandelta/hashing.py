@@ -22,8 +22,8 @@ from typing import Iterable, Sequence
 # previously cached verdicts.
 EXTRACTOR_VERSION = "2"  # v2: leaf headings only in the prose fallback
 MATCHER_VERSION = "1"
-PROMPT_VERSION = "2"  # v2: explicit done/partial boundary + conflict-resolution rule
-OUTPUT_SCHEMA = "1"
+PROMPT_VERSION = "3"  # v3: abstain unless a shortfall quote anchors partial/missed
+OUTPUT_SCHEMA = "2"  # v2: reply carries shortfall_quote
 
 _EMPHASIS_RE = re.compile(r"[*_`~]+")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
