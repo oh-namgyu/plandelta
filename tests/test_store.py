@@ -49,7 +49,7 @@ class StoreTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def _run(self, engine: ScriptedEngine):
-        result = compare_pair(self.pair, engine, self.store, find_extras=False)
+        result = compare_pair(self.pair, engine, self.store, find_extras=False, classify_prose=False)
         result.snapshot_id = self.store.write_snapshot(
             pair_id=self.pair.id, plan_hash=result.plan_hash, bundle_hash=result.bundle_hash,
             engine=engine.info.id, model=engine.info.model_id, toolchain="t1", totals=result.totals.as_dict(),
@@ -64,7 +64,7 @@ class StoreTest(unittest.TestCase):
         self.assertTrue(all(v.status == "done" for v in first.verdicts))
 
         second_engine = ScriptedEngine([])
-        second = compare_pair(self.pair, second_engine, self.store, find_extras=False)
+        second = compare_pair(self.pair, second_engine, self.store, find_extras=False, classify_prose=False)
         self.assertEqual(second_engine.calls, 0)
         self.assertEqual(second.totals.rate, first.totals.rate)
         self.assertTrue(all(v.cached for v in second.verdicts))
@@ -119,7 +119,7 @@ class StoreTest(unittest.TestCase):
         )
         try:
             engine = ScriptedEngine([all_done_reply(1, quote)])
-            result = compare_pair(self.pair, engine, self.store, find_extras=False)
+            result = compare_pair(self.pair, engine, self.store, find_extras=False, classify_prose=False)
             self.assertEqual(engine.calls, 1)
             self.assertEqual(sum(1 for v in result.verdicts if v.cached), 2)
         finally:
@@ -129,14 +129,14 @@ class StoreTest(unittest.TestCase):
         """"added" means "since last round"; a first comparison has no last round."""
         result = compare_pair(
             self.pair, ScriptedEngine([all_done_reply(3, "The ingest service reads CSV files")]),
-            self.store, find_extras=False,
+            self.store, find_extras=False, classify_prose=False,
         )
         self.assertEqual(set(result.lineage.values()), {"same"})
 
     def test_snapshot_write_is_atomic(self) -> None:
         result = compare_pair(
             self.pair, ScriptedEngine([all_done_reply(3, "The ingest service reads CSV files")]),
-            self.store, find_extras=False,
+            self.store, find_extras=False, classify_prose=False,
         )
         broken = list(result.verdicts)
         broken.append(Verdict(item=broken[0].item, status="done"))

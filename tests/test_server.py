@@ -43,7 +43,7 @@ class ServerTest(unittest.TestCase):
         engine = ScriptedEngine([all_done_reply(3, QUOTE)])
         store = Store(cls.root)
         pair = next(p for p in discover(cls.root).pairs if p.id == "prose-plan")
-        result = compare_pair(pair, engine, store, find_extras=False)
+        result = compare_pair(pair, engine, store, find_extras=False, classify_prose=False)
         store.write_snapshot(
             pair_id=pair.id, plan_hash=result.plan_hash, bundle_hash=result.bundle_hash,
             engine=engine.info.id, model=engine.info.model_id,

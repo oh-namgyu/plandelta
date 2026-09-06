@@ -23,7 +23,7 @@ from . import dbfile, overrides
 from .judge import ExtraFinding, Verdict
 from .matcher import Evidence
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 DB_NAME = "snapshots.db"
 BACKUP_KEEP = dbfile.BACKUP_KEEP
 
@@ -73,6 +73,13 @@ CREATE INDEX IF NOT EXISTS idx_overrides_pair ON overrides(pair_id, item_key, id
 CREATE TABLE IF NOT EXISTS verdict_cache (
     fingerprint TEXT PRIMARY KEY,
     status TEXT NOT NULL, reason TEXT NOT NULL, evidence TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS prose_headings (
+    plan_hash TEXT NOT NULL,
+    item_key TEXT NOT NULL,
+    promise INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (plan_hash, item_key)
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_pair ON snapshots(pair_id, id);
 CREATE INDEX IF NOT EXISTS idx_items_snapshot ON items(snapshot_id);
@@ -124,7 +131,7 @@ class Store:
                 self.conn.execute(
                     "ALTER TABLE snapshots ADD COLUMN toolchain TEXT NOT NULL DEFAULT ''"
                 )
-        # v3 adds the overrides table, which executescript already created.
+        # v3 adds overrides and v4 adds prose_headings; executescript created both.
         self.conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         self.conn.commit()
 

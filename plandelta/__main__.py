@@ -42,6 +42,10 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--force", action="store_true", help="ignore cached verdicts")
     compare.add_argument("--no-extras", action="store_true", help="skip unplanned-work detection")
     compare.add_argument(
+        "--no-prose-llm", action="store_true",
+        help="keep every heading of a prose plan instead of asking which are promises",
+    )
+    compare.add_argument(
         "--scope", action="append", default=[], metavar="TEXT",
         help="only judge items whose section or title contains TEXT (repeatable)",
     )
@@ -120,7 +124,10 @@ def _compare_one(pair: Pair, engine, store: Store, args: argparse.Namespace) -> 
             **service.snapshot_detail(store, latest["id"], pair.id),
         }
 
-    result = compare_pair(pair, engine, store, force=args.force, find_extras=not args.no_extras)
+    result = compare_pair(
+        pair, engine, store, force=args.force, find_extras=not args.no_extras,
+        classify_prose=not args.no_prose_llm,
+    )
     result.snapshot_id = store.write_snapshot(
         pair_id=pair.id, plan_hash=result.plan_hash, bundle_hash=result.bundle_hash,
         engine=engine.info.id, model=engine.resolved_model(), toolchain=chain,

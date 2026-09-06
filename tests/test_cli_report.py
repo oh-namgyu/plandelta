@@ -48,7 +48,7 @@ class CliTest(unittest.TestCase):
         pair = next(p for p in discover(self.root).pairs if p.id == "prose-plan")
         result = compare_pair(
             pair, ScriptedEngine([all_done_reply(3, "The ingest service reads CSV files")]),
-            store, find_extras=False,
+            store, find_extras=False, classify_prose=False,
         )
         store.write_snapshot(
             pair_id=pair.id, plan_hash=result.plan_hash, bundle_hash=result.bundle_hash,
@@ -66,7 +66,7 @@ class CliTest(unittest.TestCase):
 class ReportTest(unittest.TestCase):
     def _result(self, pair_id: str, reply: str):
         pair = next(p for p in discover(FIXTURES).pairs if p.id == pair_id)
-        return compare_pair(pair, ScriptedEngine([reply]), None, find_extras=False)
+        return compare_pair(pair, ScriptedEngine([reply]), None, find_extras=False, classify_prose=False)
 
     def test_report_escapes_document_markup(self) -> None:
         payload = (

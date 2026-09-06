@@ -22,7 +22,7 @@ class OverrideTest(unittest.TestCase):
         self.store = Store(self.root)
         self.pair = next(p for p in discover(FIXTURES).pairs if p.id == "prose-plan")
         engine = ScriptedEngine([all_done_reply(3, QUOTE)])
-        result = compare_pair(self.pair, engine, self.store, find_extras=False)
+        result = compare_pair(self.pair, engine, self.store, find_extras=False, classify_prose=False)
         self.snapshot_id = self.store.write_snapshot(
             pair_id=self.pair.id, plan_hash=result.plan_hash, bundle_hash=result.bundle_hash,
             engine="scripted", model="test-model",
@@ -78,7 +78,7 @@ class OverrideTest(unittest.TestCase):
     def test_overrides_survive_a_later_comparison(self) -> None:
         self.store.set_override(self.pair.id, self.item_key, "partial", "still true", "a")
         engine = ScriptedEngine([all_done_reply(3, QUOTE)])
-        result = compare_pair(self.pair, engine, self.store, force=True, find_extras=False)
+        result = compare_pair(self.pair, engine, self.store, force=True, find_extras=False, classify_prose=False)
         snapshot_id = self.store.write_snapshot(
             pair_id=self.pair.id, plan_hash=result.plan_hash, bundle_hash=result.bundle_hash,
             engine="scripted", model="test-model", toolchain="t1",

@@ -119,6 +119,7 @@ python3 -m plandelta compare --root docs/plans --report out/ --json
 | `--force` | Re-judge everything, ignoring the cache |
 | `--report DIR` | Write a standalone HTML report per pair |
 | `--scope TEXT` | Only judge items whose section or title contains TEXT (repeatable) |
+| `--no-prose-llm` | Keep every heading of a prose plan instead of asking which are promises |
 | `--yes-send-external` | Consent to sending document text off the machine |
 
 ### Review it in a browser
@@ -209,8 +210,16 @@ separately so neither can hide inside one percentage.
 ## Limits
 
 - Markdown only. No Notion, Jira or Confluence connectors.
-- Items are extracted with rules (checkboxes, ordered lists, then headings for
-  prose plans). Editing the extracted items by hand is not supported yet.
+- Items are extracted with rules — checkboxes and ordered lists — and editing
+  the extracted list by hand is not supported yet.
+- A plan with neither falls back to headings, and a document's headings mix
+  commitments with scaffolding ("Summary", "Roadmap", "Decisions needed").
+  Structure does not separate the two: measured on a real prose plan, every shape
+  signal (line count, bullets, length) overlapped between them. So for prose
+  plans only, one cached call per revision asks which headings are commitments,
+  and the rest are set aside as `out_of_scope` rather than deleted — a
+  misclassified promise stays visible and can be put back with `override`. It
+  currently sets aside about half of them; `--no-prose-llm` turns it off.
 - Unplanned-work detection is a hint, not a verdict. On the author's five-pair
   corpus it now finds three to four of the four known cases per run with about
   one extra, but repeated runs do not agree on the borderline ones — a defensive

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
-from . import judge
+from . import judge, prose
 from .discovery import Pair
 from .engines import Engine
 from .errors import DocTooLarge, EngineTimeout, PlandeltaError, SchemaViolation
@@ -41,6 +41,7 @@ class ComparisonResult:
     llm_calls: int = 0
     snapshot_id: int | None = None
     unchanged: bool = False
+    dropped_headings: int = 0
 
     def as_dict(self, root: Path) -> dict:
         return {
@@ -49,6 +50,7 @@ class ComparisonResult:
             "plan_hash": self.plan_hash,
             "bundle_hash": self.bundle_hash,
             "generated_by": {**self.engine, "llm_calls": self.llm_calls},
+            "dropped_headings": self.dropped_headings,
             "snapshot_id": self.snapshot_id,
             "unchanged": self.unchanged,
             "totals": self.totals.as_dict(),
@@ -222,6 +224,7 @@ def compare_pair(
     *,
     force: bool = False,
     find_extras: bool = True,
+    classify_prose: bool = True,
 ) -> ComparisonResult:
     """Run one comparison, reusing cached verdicts wherever inputs are unchanged."""
     plan_text, documents = load_documents(pair)
@@ -229,18 +232,28 @@ def compare_pair(
     b_hash = bundle_hash([(name, text) for name, text in documents.items()])
 
     items = extract_items(plan_text)
-    in_scope = [i for i in items if pair.in_scope(i.section, i.title)]
+    scaffolding = (
+        prose.scaffolding_keys(items, engine, store, p_hash) if classify_prose else set()
+    )
+    in_scope = [
+        i for i in items if i.key not in scaffolding and pair.in_scope(i.section, i.title)
+    ]
     paragraphs = _paragraphs(documents)
     evidence = {item.key: rank_evidence(item, paragraphs) for item in in_scope}
     fingerprints = _fingerprints(in_scope, evidence, engine)
     verdicts, pending = _load_cached(in_scope, fingerprints, store, force)
     # Items the round was never meant to answer for cost nothing and accuse
     # nobody: no model call, no score, counted on their own.
+    judged_keys = {i.key for i in in_scope}
     for item in items:
-        if item.key not in {i.key for i in in_scope}:
-            verdicts[item.key] = judge.Verdict(
-                item=item, status="out_of_scope", reason="outside the declared scope of this round"
-            )
+        if item.key in judged_keys:
+            continue
+        reason = (
+            "reads as document scaffolding rather than a promise"
+            if item.key in scaffolding
+            else "outside the declared scope of this round"
+        )
+        verdicts[item.key] = judge.Verdict(item=item, status="out_of_scope", reason=reason)
 
     judged, calls = _judge_items(engine, pending, evidence, documents) if pending else ({}, 0)
     verdicts.update(judged)
@@ -259,6 +272,7 @@ def compare_pair(
         pair=pair, plan_hash=p_hash, bundle_hash=b_hash, verdicts=ordered, extras=list(extras),
         totals=summarize(ordered, extras), engine=engine.info.as_dict(),
         lineage=lineage, llm_calls=calls + extra_calls,
+        dropped_headings=len(scaffolding),
     )
 
 
