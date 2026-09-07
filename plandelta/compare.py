@@ -8,12 +8,11 @@ from cache.
 
 from __future__ import annotations
 
-import difflib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
-from . import judge, prose
+from . import judge, lineage, prose
 from .discovery import Pair
 from .engines import Engine
 from .errors import DocTooLarge, EngineTimeout, PlandeltaError, SchemaViolation
@@ -25,7 +24,6 @@ from .scoring import Totals, summarize
 SCHEMA = 1
 MAX_PLAN_BYTES = 200 * 1024
 MAX_BUNDLE_BYTES = 500 * 1024
-RENAME_RATIO = 0.8
 
 
 @dataclass
@@ -77,34 +75,6 @@ def _paragraphs(documents: dict[str, str]) -> list[Evidence]:
     out: list[Evidence] = []
     for name, text in documents.items():
         out.extend(split_paragraphs(name, text))
-    return out
-
-
-def _lineage(items: Sequence[PlanItem], previous: dict[str, str]) -> dict[str, str]:
-    """Label each item ``same`` / ``renamed`` / ``added`` against last round.
-
-    With no previous round there is nothing to have been added *to*, so a first
-    comparison reports every item as unchanged rather than as new.
-    """
-    if not previous:
-        return {item.key: "same" for item in items}
-    out: dict[str, str] = {}
-    unmatched = dict(previous)
-    for item in items:
-        if item.key in previous:
-            out[item.key] = "same"
-            unmatched.pop(item.key, None)
-            continue
-        best_key, best_ratio = "", 0.0
-        for key, title in unmatched.items():
-            ratio = difflib.SequenceMatcher(None, item.title.lower(), title.lower()).ratio()
-            if ratio > best_ratio:
-                best_key, best_ratio = key, ratio
-        if best_ratio >= RENAME_RATIO:
-            out[item.key] = "renamed"
-            unmatched.pop(best_key, None)
-        else:
-            out[item.key] = "added"
     return out
 
 
@@ -178,11 +148,16 @@ def _find_extras(
     candidates = extra_candidates(items, paragraphs)
     if not candidates:
         return [], 0
-    try:
-        reply = engine.complete(judge.build_extra_prompt(items, candidates))
-        return judge.extras_from_reply(reply, documents, candidates), 1
-    except PlandeltaError:
-        return [], 1
+    findings: list[judge.ExtraFinding] = []
+    calls = 0
+    for batch in judge.extra_batches(candidates):
+        calls += 1
+        try:
+            reply = engine.complete(judge.build_extra_prompt(items, batch))
+            findings.extend(judge.extras_from_reply(reply, documents, batch))
+        except PlandeltaError:
+            continue
+    return findings, calls
 
 
 def _fingerprints(
@@ -267,11 +242,11 @@ def compare_pair(
         # keeps them out of the verdict cache, which is what we want.
         verdict.fingerprint = fingerprints.get(verdict.item.key, "")
 
-    lineage = _lineage(items, store.previous_items(pair.id) if store else {})
+    lineage_map = lineage.label(items, store.previous_items(pair.id) if store else {})
     return ComparisonResult(
         pair=pair, plan_hash=p_hash, bundle_hash=b_hash, verdicts=ordered, extras=list(extras),
         totals=summarize(ordered, extras), engine=engine.info.as_dict(),
-        lineage=lineage, llm_calls=calls + extra_calls,
+        lineage=lineage_map, llm_calls=calls + extra_calls,
         dropped_headings=len(scaffolding),
     )
 

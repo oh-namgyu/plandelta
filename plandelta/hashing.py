@@ -20,9 +20,9 @@ from typing import Iterable, Sequence
 
 # Algorithm versions. Bump when behaviour changes in a way that invalidates
 # previously cached verdicts.
-EXTRACTOR_VERSION = "2"  # v2: leaf headings only in the prose fallback
-MATCHER_VERSION = "5"  # v5: one bullet is one scope-creep candidate
-PROMPT_VERSION = "7"  # v7: work belonging to another project is not scope creep  # v3: abstain unless a shortfall quote anchors partial/missed
+EXTRACTOR_VERSION = "3"  # v3: prose headings judged by whether they add work
+MATCHER_VERSION = "7"  # v7: scope-creep candidates batched, never dropped
+PROMPT_VERSION = "8"  # v8: scope creep decided by capability + dependency, with examples  # v3: abstain unless a shortfall quote anchors partial/missed
 OUTPUT_SCHEMA = "2"  # v2: reply carries shortfall_quote
 
 _EMPHASIS_RE = re.compile(r"[*_`~]+")

@@ -214,5 +214,45 @@ class BulletSplitTest(unittest.TestCase):
         self.assertEqual(split_bullets(block), [block])
 
 
+
+
+class CandidateBatchTest(unittest.TestCase):
+    def _cand(self, line: int, chars: int = 100) -> Evidence:
+        return Evidence("done.md", line, line, "x" * chars, 0.1)
+
+    def test_a_small_list_is_one_batch(self) -> None:
+        from plandelta.judge import extra_batches
+
+        cands = [self._cand(i) for i in range(3)]
+        self.assertEqual(extra_batches(cands), [cands])
+
+    def test_the_count_limit_also_splits(self) -> None:
+        """The reply length, not the prompt, is what made a long list slow."""
+        from plandelta.judge import MAX_EXTRA_PER_BATCH, extra_batches
+
+        cands = [self._cand(i, 20) for i in range(MAX_EXTRA_PER_BATCH * 2 + 1)]
+        batches = extra_batches(cands)
+        self.assertEqual([len(b) for b in batches],
+                         [MAX_EXTRA_PER_BATCH, MAX_EXTRA_PER_BATCH, 1])
+
+    def test_a_large_list_is_split_rather_than_truncated(self) -> None:
+        """Quotes are truncated in the prompt, so the budget counts capped size."""
+        from plandelta.judge import EXTRA_BATCH_CHARS, MAX_QUOTE_CHARS, extra_batches
+
+        count = (EXTRA_BATCH_CHARS // MAX_QUOTE_CHARS) + 6
+        cands = [self._cand(i, MAX_QUOTE_CHARS * 3) for i in range(count)]
+        batches = extra_batches(cands)
+        self.assertGreater(len(batches), 1)
+        self.assertEqual(sum(len(b) for b in batches), count, "no candidate may be dropped")
+
+    def test_batches_keep_document_order(self) -> None:
+        from plandelta.judge import EXTRA_BATCH_CHARS, MAX_QUOTE_CHARS, extra_batches
+
+        count = (EXTRA_BATCH_CHARS // MAX_QUOTE_CHARS) + 6
+        cands = [self._cand(i, MAX_QUOTE_CHARS * 3) for i in range(count)]
+        flat = [c.line_start for batch in extra_batches(cands) for c in batch]
+        self.assertEqual(flat, sorted(flat))
+
+
 if __name__ == "__main__":
     unittest.main()

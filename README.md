@@ -218,14 +218,19 @@ separately so neither can hide inside one percentage.
   signal (line count, bullets, length) overlapped between them. So for prose
   plans only, one cached call per revision asks which headings are commitments,
   and the rest are set aside as `out_of_scope` rather than deleted — a
-  misclassified promise stays visible and can be put back with `override`. It
-  currently sets aside about half of them; `--no-prose-llm` turns it off.
-- Unplanned-work detection is a hint, not a verdict. On the author's five-pair
-  corpus it now finds three to four of the four known cases per run with about
-  one extra, but repeated runs do not agree on the borderline ones — a defensive
-  fix made during implementation, a CI runner swap, a security review patch.
-  Whether those count as unplanned delivery is a judgement people also disagree
-  about, so the list is worth reading and not worth measuring.
+  misclassified promise stays visible and can be put back with `override`. The
+  question it asks is whether a section introduces work no other section states,
+  which is what separates a roadmap (an index of work described elsewhere) from
+  a release-gate section (an obligation stated nowhere else). Measured on a real
+  prose plan: 9 of 9 sections classified correctly, three runs identical.
+  `--no-prose-llm` turns it off.
+- Unplanned-work detection is a hint, not a verdict. It asks two questions of
+  each candidate — does this add a capability no plan item asked for, and would
+  removing it break a plan item — which settled the cases that used to flip:
+  refactors, renames, reliability fixes and CI changes are now consistently
+  read as belonging to the work they serve. On the author's five-pair corpus it
+  finds two or three of the three known cases per run with at most one extra,
+  but repeated runs still disagree on one pair. Read the list; do not score it.
 
 ## Security
 
