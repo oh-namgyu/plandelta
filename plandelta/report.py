@@ -8,12 +8,18 @@ report containing ``<script>`` must render as characters, not code.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import html
 import json
 from typing import Sequence
 
 from .judge import ExtraFinding, Verdict
 from .scoring import Totals
+
+if TYPE_CHECKING:  # imported for annotations only, so no import cycle
+    from .compare import ComparisonResult
+
 
 STATUS_LABELS = {
     "exceeded": "Exceeded", "done": "Done", "partial": "Partial", "missed": "Missed",
@@ -230,7 +236,7 @@ def _extras_html(extras: Sequence[ExtraFinding]) -> str:
     return f"<h2>Unplanned work ({len(extras)})</h2>{body}"
 
 
-def render_report(result) -> str:
+def render_report(result: ComparisonResult) -> str:
     """Render one comparison result as a standalone HTML document."""
     totals = result.totals
     generated = result.engine

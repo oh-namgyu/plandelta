@@ -50,6 +50,10 @@ class ClaudeCliEngine(Engine):
         return self._resolved_model
 
     def _argv(self) -> list[str]:
+        # adaptagent-allow: public release — this package ships to PyPI/GitHub and
+        # cannot depend on a private gateway. The hardening the shim would provide
+        # is implemented here instead: stdin not argv, no shell, trimmed
+        # environment, process-group kill on timeout, redacted stderr.
         return [self.binary, "-p", "--output-format", "json", "--model", self.info.model_id]
 
     def complete(self, prompt: str) -> str:

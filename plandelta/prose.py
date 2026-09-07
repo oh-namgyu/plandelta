@@ -16,11 +16,18 @@ Checkbox and ordered-list plans never reach this module.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import sqlite3
 from typing import Sequence
 
 from .extract import PlanItem
 from .judge import parse_json_object
+
+if TYPE_CHECKING:  # imported for annotations only, so no import cycle
+    from .engines import Engine
+    from .store import Store
+
 
 MAX_BODY_CHARS = 400
 
@@ -108,7 +115,9 @@ def remember(
     )
 
 
-def scaffolding_keys(items: Sequence[PlanItem], engine, store, plan_hash: str) -> set[str]:
+def scaffolding_keys(
+    items: Sequence[PlanItem], engine: Engine, store: Store | None, plan_hash: str
+) -> set[str]:
     """Keys of headings that structure the document rather than promise work.
 
     Nothing is deleted. Misreading a real commitment as scaffolding would remove

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import argparse
 import json
 import sys
@@ -18,6 +20,10 @@ from . import service
 from .report import render_report
 from .server import DEFAULT_PORT, serve
 from .store import Store
+
+if TYPE_CHECKING:  # imported for annotations only, so no import cycle
+    from .engines import Engine
+
 
 
 def _add_common(parser: argparse.ArgumentParser) -> None:
@@ -107,7 +113,7 @@ def _select_pairs(args: argparse.Namespace) -> list[Pair]:
     return chosen
 
 
-def _compare_one(pair: Pair, engine, store: Store, args: argparse.Namespace) -> dict:
+def _compare_one(pair: Pair, engine: Engine, store: Store, args: argparse.Namespace) -> dict:
     if getattr(args, "scope", None):
         pair = replace(pair, scope=tuple(args.scope))
     plan_text, documents = load_documents(pair)

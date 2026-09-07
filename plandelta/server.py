@@ -9,6 +9,8 @@ limit. Comparing is a write — it can send your documents to an external engine
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import json
 import secrets
 import threading
@@ -23,6 +25,10 @@ from .errors import PathDenied, PlandeltaError
 from .hashing import read_text, toolchain_id
 from .store import Store
 
+if TYPE_CHECKING:  # imported for annotations only, so no import cycle
+    from .engines import Engine
+
+
 DEFAULT_PORT = 6188
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -30,7 +36,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 class ServerState:
     """Everything a request handler is allowed to touch."""
 
-    def __init__(self, root: Path, engine, host: str, port: int) -> None:
+    def __init__(self, root: Path, engine: Engine, host: str, port: int) -> None:
         self.root = root
         self.engine = engine
         self.host = host
@@ -263,7 +269,9 @@ def build_server(state: ServerState) -> ThreadingHTTPServer:
     return ThreadingHTTPServer((state.host, state.port), handler)
 
 
-def serve(root: Path, engine, host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> None:
+def serve(
+    root: Path, engine: Engine, host: str = "127.0.0.1", port: int = DEFAULT_PORT
+) -> None:
     """Run until interrupted, printing the one URL that carries the token."""
     state = ServerState(root, engine, host, port)
     httpd = build_server(state)

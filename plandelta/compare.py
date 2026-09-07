@@ -8,6 +8,8 @@ from cache.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -20,6 +22,10 @@ from .extract import PlanItem, extract_items
 from .hashing import bundle_hash, item_fingerprint, plan_hash, read_text
 from .matcher import Evidence, extra_candidates, rank_evidence, split_paragraphs
 from .scoring import Totals, summarize
+
+if TYPE_CHECKING:  # imported for annotations only, so no import cycle
+    from .store import Store
+
 
 SCHEMA = 1
 MAX_PLAN_BYTES = 200 * 1024
@@ -175,7 +181,7 @@ def _fingerprints(
 
 
 def _load_cached(
-    items: Sequence[PlanItem], fingerprints: dict[str, str], store, force: bool
+    items: Sequence[PlanItem], fingerprints: dict[str, str], store: Store | None, force: bool
 ) -> tuple[dict[str, judge.Verdict], list[PlanItem]]:
     """Split items into "already judged" and "needs the model"."""
     verdicts: dict[str, judge.Verdict] = {}
@@ -195,7 +201,7 @@ def _load_cached(
 def compare_pair(
     pair: Pair,
     engine: Engine,
-    store=None,
+    store: Store | None = None,
     *,
     force: bool = False,
     find_extras: bool = True,
@@ -251,7 +257,9 @@ def compare_pair(
     )
 
 
-def is_unchanged(store, pair: Pair, p_hash: str, b_hash: str, toolchain: str) -> bool:
+def is_unchanged(
+    store: Store | None, pair: Pair, p_hash: str, b_hash: str, toolchain: str
+) -> bool:
     """True when the newest snapshot describes these documents *and* this toolchain.
 
     The toolchain check is what makes the shortcut safe: same documents judged by

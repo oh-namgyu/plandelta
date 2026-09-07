@@ -7,6 +7,8 @@ over time — lives here, so the server stays a transport layer.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import json
 from pathlib import Path
 from typing import Sequence
@@ -18,8 +20,12 @@ from .errors import PlandeltaError
 from .hashing import bundle_hash, plan_hash
 from .scoring import summarize_rows
 
+if TYPE_CHECKING:  # imported for annotations only, so no import cycle
+    from .store import Store
 
-def scan(root: Path, store, toolchain: str) -> list[dict]:
+
+
+def scan(root: Path, store: Store, toolchain: str) -> list[dict]:
     """List every pair with its last known result and whether it drifted.
 
     ``dirty`` answers "would comparing this pair do any work?" — true when the
@@ -32,7 +38,7 @@ def scan(root: Path, store, toolchain: str) -> list[dict]:
     return rows
 
 
-def _pair_row(pair: Pair, root: Path, store, toolchain: str) -> dict:
+def _pair_row(pair: Pair, root: Path, store: Store, toolchain: str) -> dict:
     latest = store.latest_snapshot(pair.id)
     row = {
         **pair.as_dict(root),
@@ -52,7 +58,7 @@ def _pair_row(pair: Pair, root: Path, store, toolchain: str) -> dict:
     return row
 
 
-def snapshot_detail(store, snapshot_id: int, pair_id: str = "") -> dict:
+def snapshot_detail(store: Store, snapshot_id: int, pair_id: str = "") -> dict:
     """Items and extras of one snapshot, with any human overrides applied.
 
     An unchanged pair must still answer "what were the verdicts?" without
@@ -87,7 +93,7 @@ def snapshot_detail(store, snapshot_id: int, pair_id: str = "") -> dict:
     }
 
 
-def trend(store, pair_id: str) -> list[dict]:
+def trend(store: Store, pair_id: str) -> list[dict]:
     """Completion rate and coverage per round, oldest first."""
     out = []
     for index, row in enumerate(store.snapshots(pair_id), start=1):
