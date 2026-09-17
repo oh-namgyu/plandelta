@@ -127,7 +127,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(204, b"", "image/x-icon")
             return
         if route == "/api/health":
-            self._json({"ok": True, "root": str(self.state.root)})
+            self._json({"ok": True})  # root 미노출: 무인증 health 가 절대경로를 흘리던 것(/테스트 DSEC)
             return
         if not self._guard(writing=False):
             return
