@@ -22,6 +22,13 @@ python3 -m plandelta compare my-project --root docs/plans \
     --yes-send-external --report out/
 ```
 
+`--root docs/plans` points at your own plans directory. To try it against the
+demo pair that ships with the repo, use `--root examples` instead:
+
+```bash
+python3 -m plandelta pairs --root examples
+```
+
 ![The review UI: KPI row, status donut, per-round trend, and a plan/evidence split](docs/plandelta-ui.png)
 
 ## Why

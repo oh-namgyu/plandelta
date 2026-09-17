@@ -3,6 +3,10 @@ __pycache__/
 .plandelta/
 build/
 dist/
+venv/
+.venv/
+.pytest_cache/
+__pycache__/
 *.egg-info/
 
 # never commit credentials or local secrets
